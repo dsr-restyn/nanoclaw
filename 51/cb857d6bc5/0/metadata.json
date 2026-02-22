@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "51cb857d6bc5",
+  "session_id": "50c0bb06-3c22-441c-b4e8-4dc9fb54c8be",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-22T22:46:07.26736763Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".gitignore",
+    "container/agent-runner/src/index.ts",
+    "groups/warren/CLAUDE.md",
+    "src/channels/ntfy.ts",
+    "src/channels/warren.ts",
+    "src/container-runner.ts",
+    "src/index.ts",
+    "src/task-scheduler.ts"
+  ],
+  "agent": "Claude Code",
+  "token_usage": {
+    "input_tokens": 1513,
+    "cache_creation_tokens": 795743,
+    "cache_read_tokens": 51592156,
+    "output_tokens": 61682,
+    "api_call_count": 445
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-22T22:46:06.603359387Z",
+    "agent_lines": 92,
+    "human_added": 87,
+    "human_modified": 43,
+    "human_removed": 0,
+    "total_committed": 222,
+    "agent_percentage": 41.44144144144144
+  }
+}
