@@ -371,6 +371,19 @@ export async function applySkill(skillDir: string): Promise<ApplyResult> {
       }
     }
 
+    // --- Update base snapshots ---
+    // After successful application, update the base to match the current state
+    // so that subsequent skills merge against the post-application state.
+    for (const relPath of manifest.modifies) {
+      const resolvedPath = resolvePathRemap(relPath, pathRemap);
+      const currentPath = path.join(projectRoot, resolvedPath);
+      const basePath = path.join(projectRoot, NANOCLAW_DIR, 'base', resolvedPath);
+      if (fs.existsSync(currentPath)) {
+        fs.mkdirSync(path.dirname(basePath), { recursive: true });
+        fs.copyFileSync(currentPath, basePath);
+      }
+    }
+
     // --- Cleanup ---
     clearBackup();
 

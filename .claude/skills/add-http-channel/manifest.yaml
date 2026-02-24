@@ -1,0 +1,21 @@
+skill: http-channel
+version: 1.0.0
+description: "HTTP/SSE channel with REST API and Bearer token auth"
+core_version: 0.1.0
+adds:
+  - src/channels/http.ts
+modifies:
+  - src/db.ts
+  - src/config.ts
+  - src/index.ts
+structured:
+  npm_dependencies:
+    fastify: "^5.2.1"
+    "@fastify/cors": "^11.0.0"
+  env_additions:
+    - HTTP_CHANNEL_ENABLED
+    - HTTP_PORT
+    - WHATSAPP_ENABLED
+conflicts: []
+depends: []
+test: "npm run build"

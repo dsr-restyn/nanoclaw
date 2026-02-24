@@ -1,0 +1,31 @@
+skill: rabbit-r1
+version: 1.0.0
+description: "Rabbit R1: Creation frontend, OpenClaw voice, QR pairing"
+core_version: 0.1.0
+adds:
+  - src/channels/http/voice.ts
+  - src/channels/http/voice-protocol.ts
+  - static/creation/index.html
+  - static/creation/js/api.js
+  - static/creation/js/app.js
+  - static/creation/js/hardware.js
+  - static/creation/js/notify.js
+  - static/creation/css/styles.css
+modifies:
+  - src/channels/http.ts
+  - src/config.ts
+structured:
+  npm_dependencies:
+    "@fastify/static": "^8.1.0"
+    "@fastify/websocket": "^11.0.2"
+    qrcode: "^1.5.4"
+  env_additions:
+    - VOICE_ENABLED
+    - VOICE_PORT
+conflicts: []
+depends:
+  - http-channel
+test: "npm run build"
+post_apply:
+  - "npm install --save-dev @types/qrcode @types/ws"
+  - "mkdir -p dist && cp -r static dist/ 2>/dev/null || true"
