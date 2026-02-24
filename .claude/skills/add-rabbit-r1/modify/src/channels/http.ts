@@ -37,7 +37,7 @@ import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
 
 import { logger } from '../logger.js';
-import { ASSISTANT_NAME, VOICE_ENABLED, VOICE_PORT, HTTP_PORT } from '../config.js';
+import { ASSISTANT_NAME, MAIN_GROUP_FOLDER, VOICE_ENABLED, VOICE_PORT, HTTP_PORT } from '../config.js';
 import {
   storeMessageDirect,
   getHttpGroupMessages,
@@ -311,7 +311,9 @@ export class HttpChannel implements Channel {
 
         const id = randomUUID();
         const jid = `http:${id}`;
-        const folder = `http-${id.slice(0, 8)}`;
+        const groups = opts.registeredGroups();
+        const hasMain = Object.values(groups).some(g => g.folder === MAIN_GROUP_FOLDER);
+        const folder = hasMain ? `http-${id.slice(0, 8)}` : MAIN_GROUP_FOLDER;
         const groupName = name || `HTTP ${id.slice(0, 8)}`;
         const now = new Date().toISOString();
 
