@@ -35,6 +35,9 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  eventType?: 'text' | 'tool' | 'result';
+  tool?: string;
+  toolSummary?: string;
 }
 
 interface SessionEntry {
@@ -461,6 +464,24 @@ async function runQuery(
 
     if (message.type === 'assistant' && 'uuid' in message) {
       lastAssistantUuid = (message as { uuid: string }).uuid;
+
+      // Emit tool use events for streaming progress
+      const content = (message as { message?: { content?: Array<{ type: string; name?: string; input?: Record<string, unknown> }> } }).message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'tool_use' && block.name) {
+            const inputStr = block.input ? JSON.stringify(block.input) : '';
+            const summary = inputStr.length > 200 ? inputStr.slice(0, 200) + '...' : inputStr;
+            writeOutput({
+              status: 'success',
+              result: null,
+              eventType: 'tool',
+              tool: block.name,
+              toolSummary: summary,
+            });
+          }
+        }
+      }
     }
 
     if (message.type === 'system' && message.subtype === 'init') {
@@ -480,6 +501,7 @@ async function runQuery(
       writeOutput({
         status: 'success',
         result: textResult || null,
+        eventType: 'result',
         newSessionId
       });
     }

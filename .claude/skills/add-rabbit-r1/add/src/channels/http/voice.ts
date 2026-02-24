@@ -171,10 +171,11 @@ function setupSession(
       return activeJid;
     }
 
-    // Create a new group
+    // Create a new group — use 'main' folder if no main group exists yet
     const id = randomUUID();
     const jid = `http:${id}`;
-    const folder = `http-${id.slice(0, 8)}`;
+    const hasMain = Object.values(groups).some(g => g.folder === 'main');
+    const folder = hasMain ? `http-${id.slice(0, 8)}` : 'main';
     opts.registerGroup(jid, {
       name: 'Voice',
       folder,
