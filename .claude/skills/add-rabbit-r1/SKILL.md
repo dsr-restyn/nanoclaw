@@ -104,6 +104,13 @@ requires a valid auth token.
 **Voice audio delayed:** The voice handler accumulates text events and sends a "final"
 message after 5 seconds of idle time. This is intentional — it batches tokens for TTS.
 
-**Voice reconnect "invalid token":** The voice handler persists device-to-group
-mappings in memory. Reconnects reuse the same group. If the token is truly invalid,
-create a new one via the `/pair` page.
+**Voice reconnect "invalid token":** The voice handler now persists sessions in SQLite
+and supports IP-based reconnection. If the R1 disconnects and reconnects from the same
+IP within 10 minutes, it will auto-resume without re-scanning the QR code. Check
+`/voice/status` for session health. If reconnection still fails, create a new token
+via the `/pair` page.
+
+**Creation shows no responses:** The creation uses polling-based activity fetching as a
+fallback. If the activity feed is empty, check that the voice session is connected
+(green banner at top). The creation polls `/groups/:jid/messages` every 3 seconds.
+Check browser console for fetch errors.

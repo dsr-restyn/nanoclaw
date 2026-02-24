@@ -3,22 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=240, height=282, initial-scale=1.0, user-scalable=no">
-  <title>Warren</title>
+  <title>NanoClaw</title>
   <link rel="stylesheet" href="css/styles.css?v=20">
 </head>
 <body>
-  <!-- Sessions List View -->
-  <div id="view-sessions" class="view active">
+  <!-- Dashboard View (default) -->
+  <div id="view-dashboard" class="view active">
     <div class="header">
-      <span class="title">WARREN://</span>
+      <span class="title">NANOCLAW://</span>
       <span id="connection-dot" class="dot dot-gray"></span>
     </div>
-    <div id="session-list" class="scroll-area"></div>
+    <div id="voice-banner" class="voice-banner">
+      <span id="voice-state" class="voice-state">VOICE: --</span>
+      <span id="voice-duration" class="voice-duration"></span>
+      <span id="voice-drops" class="voice-drops"></span>
+    </div>
+    <div id="activity-feed" class="scroll-area"></div>
     <div class="footer">
       <div class="session-footer-row">
-        <button id="btn-new-session" class="btn-primary">[ + NEW ]</button>
+        <button id="btn-chat" class="btn-primary">[ CHAT ]</button>
         <button id="btn-monitor" class="btn-cmd-lg">[ MON ]</button>
-        <button id="btn-cmd-sessions" class="btn-cmd-lg">[ CMD ]</button>
       </div>
     </div>
   </div>
@@ -39,21 +43,6 @@
         <input id="msg-input" type="text" placeholder="> _" class="msg-input">
         <button id="btn-cmd" class="btn-cmd">[CMD]</button>
       </div>
-    </div>
-  </div>
-
-  <!-- New Session View -->
-  <div id="view-new" class="view">
-    <div class="header">
-      <button id="btn-back-new" class="btn-back">&lt;-</button>
-      <span class="title">NEW SESSION</span>
-    </div>
-    <div class="form-area">
-      <label for="initial-msg">PROMPT</label>
-      <input id="initial-msg" type="text" placeholder="enter command..." class="input">
-    </div>
-    <div class="footer">
-      <button id="btn-start" class="btn-primary">[ EXEC ]</button>
     </div>
   </div>
 

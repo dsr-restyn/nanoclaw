@@ -52,7 +52,7 @@ This deterministically:
 If the apply reports merge conflicts, read the intent files:
 - `modify/src/db.ts.intent.md` — token table and functions
 - `modify/src/config.ts.intent.md` — channel config exports
-- `modify/src/index.ts.intent.md` — channel registration in main()
+- `modify/src/index.ts.intent.md` — channel registration
 
 ### Validate
 

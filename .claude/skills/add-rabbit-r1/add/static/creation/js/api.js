@@ -1,14 +1,14 @@
 /**
- * Warren API client — NanoClaw HTTP channel edition.
+ * NanoClaw API client — NanoClaw HTTP channel edition.
  * Communicates with NanoClaw's HTTP channel via fetch() and SSE.
  *
  * Auth: device token is embedded in the creation URL (?token=...).
  * The R1 WebView clears localStorage between launches, so we
  * read the token from the URL every time.
  *
- * Maps Warren's /sessions/* API to NanoClaw's /groups/* endpoints.
+ * Maps NanoClaw's /sessions/* API to NanoClaw's /groups/* endpoints.
  */
-const Warren = (() => {
+const NanoClaw = (() => {
   let _serverUrl = "";
   let _token = "";
 
@@ -189,6 +189,23 @@ const Warren = (() => {
     return { status: "ok" };
   }
 
+  async function fetchVoiceStatus() {
+    return _fetch("/voice/status");
+  }
+
+  async function fetchGroupActivity(sessionId, since) {
+    const params = since ? "?since=" + encodeURIComponent(since) : "";
+    const msgs = await _fetch("/groups/" + _enc(sessionId) + "/messages" + params);
+    return msgs.map(function(m) {
+      return {
+        type: m.is_bot_message ? "text" : "user",
+        content: m.content,
+        timestamp: m.timestamp,
+        sender: m.sender_name,
+      };
+    });
+  }
+
   return {
     init,
     initFromUrl,
@@ -207,6 +224,8 @@ const Warren = (() => {
     fetchMonitorTasks,
     pauseTask,
     resumeTask,
+    fetchVoiceStatus,
+    fetchGroupActivity,
     get serverUrl() { return _serverUrl; },
     get connected() { return !!_token; },
   };

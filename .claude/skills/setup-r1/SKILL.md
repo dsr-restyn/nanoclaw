@@ -80,7 +80,62 @@ ls dist/static/creation/index.html
 
 Build must be clean and static files must exist in `dist/`.
 
-## Phase 5: Create Device Token
+## Phase 4b: Make Channel Creation Conditional
+
+The skill patches add HTTP channel support to `src/index.ts` but leave WhatsApp
+unconditionally created and connected. Since this is an R1-only setup (no WhatsApp),
+`src/index.ts` must conditionally create channels based on config flags.
+
+In `src/index.ts`, make the following changes:
+
+1. **Remove the static WhatsApp import** (`import { WhatsAppChannel } from './channels/whatsapp.js'`).
+   Remove the top-level `let whatsapp: WhatsAppChannel` variable.
+   Add `WHATSAPP_ENABLED`, `HTTP_CHANNEL_ENABLED`, and `HTTP_PORT` to the config import.
+
+2. **Replace the unconditional channel creation** in `main()`. Instead of always creating
+   `new WhatsAppChannel(...)` and calling `connect()`, wrap it in `if (WHATSAPP_ENABLED)` with a
+   dynamic `await import('./channels/whatsapp.js')`. Do the same for HTTP: wrap in
+   `if (HTTP_CHANNEL_ENABLED)` with a dynamic `await import('./channels/http.js')`, creating an
+   `HttpChannel` with `port: HTTP_PORT`, the shared callbacks, plus
+   `enqueueCheck: (jid) => queue.enqueueMessageCheck(jid)` and `registerGroup`.
+
+3. **Add a guard** after channel creation: if `channels.length === 0`, log a fatal error
+   and exit — at least one channel must be enabled.
+
+4. **Fix `syncGroupMetadata` in the IPC watcher** — it references the old `whatsapp` variable.
+   Replace it with a lookup: `channels.find((c) => c.name === 'whatsapp')` cast to
+   `WhatsAppChannel`, falling back to `Promise.resolve()` if WhatsApp is not active.
+
+Verify:
+
+```bash
+npm run build
+```
+
+## Phase 5: Apply Tool Events (optional)
+
+This adds "Agent is using Bash..." progress indicators to the Creation activity
+feed. It requires a container rebuild, so skip if you want faster setup.
+
+```bash
+npx tsx scripts/apply-skill.ts .claude/skills/add-tool-events
+```
+
+If applied, rebuild the container:
+
+```bash
+./container/build.sh
+```
+
+If skipped, no container rebuild is needed — the base container from Phase 1 works.
+
+Verify:
+
+```bash
+npm run build
+```
+
+## Phase 6: Create Device Token
 
 Create an initial device token for the R1:
 
@@ -92,7 +147,7 @@ Show the user the printed token and remind them to save it — it cannot be retr
 
 Create additional tokens anytime with `npx tsx scripts/create-token.ts <label>`.
 
-## Phase 6: Configure Environment
+## Phase 7: Configure Environment
 
 Create or update `.env` (or the environment config for your deployment):
 
@@ -103,7 +158,7 @@ WHATSAPP_ENABLED=false
 VOICE_ENABLED=true
 ```
 
-## Phase 7: HTTPS Setup
+## Phase 8: HTTPS Setup
 
 The R1 requires HTTPS for Creation WebViews and WSS for voice. Ask the user
 how they want to expose NanoClaw using `AskUserQuestion`:
@@ -212,43 +267,17 @@ to `localhost:4080`. The end result is an HTTPS URL. Record it.
 Tell the user they can test locally at `http://localhost:4080` but pairing a physical
 R1 will need HTTPS. They can run this phase later.
 
-## Phase 8: Verify
+## Phase 9: Start & Verify
 
-Start NanoClaw and verify everything works:
+Start NanoClaw:
 
 ```bash
 npm start
 ```
 
-In another terminal, test:
+Do NOT attempt to test the API with curl — JSON body parsing over the Bash tool is unreliable. Instead, tell the user to open the pairing page directly.
 
-```bash
-# Health check
-curl http://localhost:4080/health
-
-# List groups (should be empty)
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:4080/groups
-
-# Create a group
-curl -X POST http://localhost:4080/groups \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello!", "name": "Test"}'
-```
-
-If HTTPS is configured, also verify through the public URL:
-```bash
-curl https://YOUR_PUBLIC_URL/health
-```
-
-Open the pairing page in a browser:
-```
-https://YOUR_PUBLIC_URL/pair?token=YOUR_TOKEN
-```
-
-(Or `http://localhost:4080/pair?token=YOUR_TOKEN` for local testing.)
-
-## Phase 9: Done
+## Phase 10: Done
 
 Tell the user:
 
@@ -257,13 +286,13 @@ Tell the user:
 > **Pair your R1:**
 > Open the admin pairing page on your computer or phone:
 > `https://YOUR_PUBLIC_URL/pair?token=YOUR_TOKEN`
+> (Or `http://localhost:4080/pair?token=YOUR_TOKEN` for local testing.)
 >
 > It shows two QR codes — scan them with your R1:
 > - **Creation QR** — installs the WebView UI on the R1
 > - **Voice QR** — pairs push-to-talk (if VOICE_ENABLED=true)
 >
 > **Your device token:** `YOUR_TOKEN` — save it, it's only shown once.
-> Create more tokens by messaging the agent:
-> "Create an HTTP device token called 'my-other-device'"
+> Create more tokens anytime with: `npx tsx scripts/create-token.ts <label>`
 >
 > **Health check:** `curl https://YOUR_PUBLIC_URL/health`

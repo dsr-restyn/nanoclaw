@@ -43,6 +43,7 @@ import {
   getHttpGroupMessages,
   validateHttpToken,
   createHttpToken,
+  getVoiceStatus,
 } from '../db.js';
 import { voiceHandler } from './http/voice.js';
 import type {
@@ -103,7 +104,7 @@ export class HttpChannel implements Channel {
 
   constructor(opts: HttpChannelOpts) {
     this.opts = opts;
-    this.server = Fastify({ logger: false });
+    this.server = Fastify({ logger: false, trustProxy: true });
   }
 
   // ── Channel interface ────────────────────────────────────────────
@@ -173,6 +174,16 @@ export class HttpChannel implements Channel {
     const event: GroupEvent = { type: 'text', content: text };
     this.ssePush(jid, 'text', event);
     this.bus.emit('event', jid, event);
+    storeMessageDirect({
+      id: randomUUID(),
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: text,
+      timestamp: new Date().toISOString(),
+      is_from_me: true,
+      is_bot_message: true,
+    });
   }
 
   async sendProgress(
@@ -183,12 +194,32 @@ export class HttpChannel implements Channel {
     const event: GroupEvent = { type: 'tool', tool, summary };
     this.ssePush(jid, 'tool', event);
     this.bus.emit('event', jid, event);
+    storeMessageDirect({
+      id: randomUUID(),
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: `[tool: ${tool}] ${summary}`,
+      timestamp: new Date().toISOString(),
+      is_from_me: true,
+      is_bot_message: true,
+    });
   }
 
   async sendResult(jid: string, summary: string): Promise<void> {
     const event: GroupEvent = { type: 'result', summary };
     this.ssePush(jid, 'result', event);
     this.bus.emit('event', jid, event);
+    storeMessageDirect({
+      id: randomUUID(),
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: summary,
+      timestamp: new Date().toISOString(),
+      is_from_me: true,
+      is_bot_message: true,
+    });
   }
 
   async setTyping(jid: string, isTyping: boolean): Promise<void> {
@@ -234,6 +265,27 @@ export class HttpChannel implements Channel {
 
     // GET /health — no auth
     server.get('/health', async () => ({ status: 'ok' }));
+
+    // GET /voice/status — voice session health
+    server.get('/voice/status', { preHandler: requireAuth }, async () => {
+      const session = getVoiceStatus();
+      if (!session) return { connected: false };
+      const isConnected = session.disconnected_at === null;
+      let durationSec = 0;
+      if (session.connected_at) {
+        const ref = isConnected ? Date.now() : new Date(session.disconnected_at!).getTime();
+        durationSec = Math.round((ref - new Date(session.connected_at).getTime()) / 1000);
+      }
+      return {
+        connected: isConnected,
+        device_id: session.device_id,
+        group_jid: session.group_jid,
+        duration_s: durationSec,
+        drops: session.drop_count,
+        connected_at: session.connected_at,
+        disconnected_at: session.disconnected_at,
+      };
+    });
 
     // GET /groups
     server.get('/groups', { preHandler: requireAuth }, async () => {
@@ -354,6 +406,7 @@ export class HttpChannel implements Channel {
         if (!this.sseClients.has(jid))
           this.sseClients.set(jid, new Set());
         this.sseClients.get(jid)!.add(res);
+        logger.info({ jid, clientCount: this.sseClients.get(jid)!.size }, 'SSE client connected');
 
         request.raw.on('close', () => {
           const set = this.sseClients.get(jid);
@@ -361,6 +414,7 @@ export class HttpChannel implements Channel {
             set.delete(res);
             if (set.size === 0) this.sseClients.delete(jid);
           }
+          logger.info({ jid, remaining: set?.size ?? 0 }, 'SSE client disconnected');
         });
 
         // Initial ping so the client knows the stream is live
@@ -376,11 +430,13 @@ export class HttpChannel implements Channel {
     // Voice WebSocket endpoints
     // R1 connects to ws://host:port/ (root) after OpenClaw pairing
     if (VOICE_ENABLED) {
-      server.get('/', { websocket: true }, (socket) => {
-        voiceHandler(socket, this);
+      server.get('/', { websocket: true }, (socket, request) => {
+        const ip = request.ip || 'unknown';
+        voiceHandler(socket, this, ip);
       });
-      server.get('/ws/voice', { websocket: true }, (socket) => {
-        voiceHandler(socket, this);
+      server.get('/ws/voice', { websocket: true }, (socket, request) => {
+        const ip = request.ip || 'unknown';
+        voiceHandler(socket, this, ip);
       });
     }
 
