@@ -187,6 +187,14 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let outputSentToUser = false;
 
   const output = await runAgent(group, prompt, chatJid, async (result) => {
+    // Tool use event — relay to channel for progress tracking
+    if (result.eventType === 'tool' && result.tool) {
+      logger.info({ group: group.name, tool: result.tool }, 'Agent tool use');
+      await channel.sendProgress?.(chatJid, result.tool, result.toolSummary || '');
+      resetIdleTimer();
+      return;
+    }
+
     // Streaming output callback — called for each agent result
     if (result.result) {
       const raw = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
@@ -194,7 +202,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        await channel.sendMessage(chatJid, text);
+        if (result.eventType === 'result') {
+          await channel.sendResult?.(chatJid, text);
+        } else {
+          await channel.sendMessage(chatJid, text);
+        }
         outputSentToUser = true;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)

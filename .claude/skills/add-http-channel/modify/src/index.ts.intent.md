@@ -18,6 +18,12 @@ Added HTTP/SSE channel registration and switched WhatsApp guard to use config co
 - Creates `HttpChannel` with `port: HTTP_PORT`, shared `channelOpts`, `enqueueCheck`, `registerGroup`
 - Pushes to `channels` array and connects
 
+### processGroupMessages() — streaming output callback
+- Added: tool event routing — `result.eventType === 'tool'` calls `channel.sendProgress?.()`
+- Added: result event routing — `result.eventType === 'result'` calls `channel.sendResult?.()`
+- Changed: text output still uses `channel.sendMessage()` (unchanged for WhatsApp)
+- Both sendProgress and sendResult use optional chaining (no-op on channels that don't implement them)
+
 ## Invariants
 - All existing message processing logic is preserved
 - The `runAgent` function is completely unchanged
