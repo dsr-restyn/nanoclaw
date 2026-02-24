@@ -87,9 +87,6 @@ export interface Channel {
   disconnect(): Promise<void>;
   // Optional: typing indicator. Channels that support it implement it.
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
-  // Optional: tool progress and result events. HTTP channel uses these for SSE/polling.
-  sendProgress?(jid: string, tool: string, summary: string): Promise<void>;
-  sendResult?(jid: string, summary: string): Promise<void>;
 }
 
 // Callback type that channels use to deliver inbound messages

@@ -42,9 +42,6 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
-  eventType?: 'text' | 'tool' | 'result';
-  tool?: string;
-  toolSummary?: string;
 }
 
 interface VolumeMount {
