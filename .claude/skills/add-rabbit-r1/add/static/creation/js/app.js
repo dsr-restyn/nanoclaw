@@ -1,33 +1,37 @@
 /**
  * NanoClaw R1 Creation -- main app logic.
- * View router, session list, chat rendering.
+ * Dashboard-first: activity feed, voice status, chat, monitor.
  */
 (() => {
   // State
-  let currentView = "sessions";
-  let currentSessionId = null;
-  let selectedIndex = 0;
-  let sessions = [];
+  let currentView = "dashboard";
+  let activeGroupJid = null;  // auto-detected from voice status or groups list
+  let currentSessionId = null; // for chat view
   let eventSource = null;
-  let sttRec = null; // active SpeechRecognition instance
+  let pollTimer = null;
+  let voicePollTimer = null;
+  let lastPollTimestamp = "";
+  let sttRec = null;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let workflowSteps = []; // [{index, total, status, text}]
+  let workflowSteps = [];
 
   // DOM refs
   const views = {
-    sessions: document.getElementById("view-sessions"),
+    dashboard: document.getElementById("view-dashboard"),
     chat: document.getElementById("view-chat"),
-    new: document.getElementById("view-new"),
     monitor: document.getElementById("view-monitor"),
   };
-  const sessionList = document.getElementById("session-list");
+  const activityFeed = document.getElementById("activity-feed");
+  const voiceState = document.getElementById("voice-state");
+  const voiceDuration = document.getElementById("voice-duration");
+  const voiceDrops = document.getElementById("voice-drops");
+  const voiceBanner = document.getElementById("voice-banner");
+  const connDot = document.getElementById("connection-dot");
   const chatMessages = document.getElementById("chat-messages");
   const chatTitle = document.getElementById("chat-title");
   const chatStatus = document.getElementById("chat-status");
   const msgInput = document.getElementById("msg-input");
   const pttIndicator = document.getElementById("ptt-indicator");
-  const connDot = document.getElementById("connection-dot");
-  const initialMsg = document.getElementById("initial-msg");
   const monitorContent = document.getElementById("monitor-content");
   const monitorHealth = document.getElementById("monitor-health");
   const monitorAgents = document.getElementById("monitor-agents");
@@ -64,147 +68,144 @@
     Object.values(views).forEach((v) => v.classList.remove("active"));
     views[name].classList.add("active");
     currentView = name;
-    selectedIndex = 0;
 
-    if (name === "sessions") refreshSessions();
-    if (name === "new") initialMsg.focus();
+    if (name === "dashboard") {
+      refreshVoiceStatus();
+      startActivityPolling();
+    } else {
+      stopActivityPolling();
+    }
+
+    if (name === "chat" && activeGroupJid) {
+      openSession({ id: activeGroupJid, name: activeGroupJid });
+    }
+
     if (name === "monitor") refreshMonitor();
   }
 
-  // -- Sessions View --
+  // -- Voice Status --
 
-  async function refreshSessions() {
+  async function refreshVoiceStatus() {
     try {
-      sessions = await NanoClaw.listSessions();
-      renderSessionList();
+      const status = await NanoClaw.fetchVoiceStatus();
       connDot.className = "dot dot-green";
-    } catch (err) {
-      connDot.className = "dot dot-red";
-      sessionList.textContent = "";
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "CONNECTION FAILED";
-      sessionList.appendChild(empty);
-    }
-  }
 
-  function renderSessionList() {
-    sessionList.textContent = "";
+      if (status.connected) {
+        voiceState.textContent = "VOICE: ON";
+        voiceBanner.classList.add("voice-connected");
+        voiceBanner.classList.remove("voice-disconnected");
 
-    if (sessions.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "NO SESSIONS. CREATE ONE TO BEGIN.";
-      sessionList.appendChild(empty);
-      return;
-    }
-
-    sessions.forEach((s, i) => {
-      const dotClass = s.status === "active" ? "dot-green"
-        : s.status === "idle" ? "dot-yellow" : "dot-gray";
-      const selected = i === selectedIndex ? " selected" : "";
-
-      const wrapper = document.createElement("div");
-      wrapper.className = "session-item-wrapper";
-
-      const delBtn = document.createElement("div");
-      delBtn.className = "session-item-delete";
-      delBtn.textContent = "DEL";
-
-      const item = document.createElement("div");
-      item.className = "session-item" + selected;
-      item.dataset.index = i;
-
-      const dot = document.createElement("span");
-      dot.className = "dot " + dotClass;
-
-      const info = document.createElement("div");
-      info.className = "session-info";
-
-      const nameEl = document.createElement("div");
-      nameEl.className = "session-name";
-      nameEl.textContent = s.name;
-
-      const repoEl = document.createElement("div");
-      repoEl.className = "session-repo";
-      repoEl.textContent = s.repo;
-
-      info.appendChild(nameEl);
-      info.appendChild(repoEl);
-      item.appendChild(dot);
-      item.appendChild(info);
-      wrapper.appendChild(delBtn);
-      wrapper.appendChild(item);
-
-      // Swipe tracking
-      let startX = 0;
-      let swiped = false;
-
-      item.addEventListener("touchstart", (e) => {
-        startX = e.touches[0].clientX;
-      }, { passive: true });
-
-      item.addEventListener("touchmove", (e) => {
-        const dx = e.touches[0].clientX - startX;
-        if (dx < -10) {
-          const offset = Math.max(-60, dx);
-          item.style.transform = `translateX(${offset}px)`;
-          item.style.transition = "none";
-        }
-      }, { passive: true });
-
-      item.addEventListener("touchend", (e) => {
-        const dx = (e.changedTouches[0]?.clientX || startX) - startX;
-        item.style.transition = "transform 0.2s ease-out";
-        if (dx < -40) {
-          item.classList.add("swiped");
-          item.style.transform = "";
-          swiped = true;
+        // Format duration as MM:SS
+        if (status.duration_s != null) {
+          const mins = Math.floor(status.duration_s / 60);
+          const secs = status.duration_s % 60;
+          voiceDuration.textContent = String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
         } else {
-          item.classList.remove("swiped");
-          item.style.transform = "";
-          swiped = false;
+          voiceDuration.textContent = "";
         }
-      });
 
-      item.addEventListener("click", () => {
-        if (swiped) {
-          item.classList.remove("swiped");
-          swiped = false;
-          return;
+        // Drop count
+        if (status.drops > 0) {
+          voiceDrops.textContent = "D:" + status.drops;
+        } else {
+          voiceDrops.textContent = "";
         }
-        selectedIndex = i;
-        openSession(s);
-      });
 
-      delBtn.addEventListener("click", async () => {
-        try {
-          await NanoClaw.deleteSession(s.id);
-          wrapper.style.transition = "opacity 0.2s, max-height 0.2s";
-          wrapper.style.opacity = "0";
-          wrapper.style.maxHeight = "0";
-          wrapper.style.overflow = "hidden";
-          setTimeout(() => {
-            wrapper.remove();
-            sessions.splice(i, 1);
-            if (sessions.length === 0) renderSessionList();
-          }, 200);
-        } catch (err) {
-          item.classList.remove("swiped");
-          swiped = false;
+        // Auto-detect activeGroupJid from voice status
+        if (!activeGroupJid && status.group_jid) {
+          activeGroupJid = status.group_jid;
+          startActivityPolling();
         }
-      });
-
-      sessionList.appendChild(wrapper);
-    });
+      } else {
+        voiceState.textContent = "VOICE: OFF";
+        voiceBanner.classList.add("voice-disconnected");
+        voiceBanner.classList.remove("voice-connected");
+        voiceDuration.textContent = "";
+        voiceDrops.textContent = "";
+      }
+    } catch {
+      connDot.className = "dot dot-red";
+      voiceState.textContent = "VOICE: --";
+      voiceBanner.classList.remove("voice-connected");
+      voiceBanner.classList.add("voice-disconnected");
+      voiceDuration.textContent = "";
+      voiceDrops.textContent = "";
+    }
   }
+
+  // -- Activity Feed --
+
+  async function pollActivity() {
+    if (!activeGroupJid) return;
+    try {
+      const events = await NanoClaw.fetchGroupActivity(activeGroupJid, lastPollTimestamp);
+      events.forEach((ev) => {
+        appendActivityItem(ev);
+        if (ev.timestamp) lastPollTimestamp = ev.timestamp;
+      });
+    } catch {
+      // offline -- skip
+    }
+  }
+
+  function appendActivityItem(ev) {
+    const div = document.createElement("div");
+
+    switch (ev.type) {
+      case "user":
+        div.className = "activity-user";
+        div.textContent = "> " + truncateText(ev.content, 60);
+        break;
+      case "text":
+        div.className = "activity-text";
+        div.textContent = truncateText(ev.content, 60);
+        break;
+      case "tool":
+        div.className = "activity-tool";
+        div.textContent = ev.tool || ev.content || "";
+        break;
+      case "result":
+        div.className = "activity-result";
+        div.textContent = truncateText(ev.content || ev.summary || "", 60);
+        break;
+      default:
+        div.className = "activity-text";
+        div.textContent = truncateText(ev.content || "", 60);
+        break;
+    }
+
+    activityFeed.appendChild(div);
+    activityFeed.scrollTop = activityFeed.scrollHeight;
+  }
+
+  function truncateText(text, max) {
+    if (!text) return "";
+    const single = text.replace(/\n/g, " ");
+    if (single.length <= max) return single;
+    return single.substring(0, max) + "...";
+  }
+
+  function startActivityPolling() {
+    stopActivityPolling();
+    if (!activeGroupJid) return;
+    pollActivity();
+    pollTimer = setInterval(pollActivity, 3000);
+  }
+
+  function stopActivityPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  // -- Chat View --
 
   async function openSession(session) {
     currentSessionId = session.id;
     chatTitle.textContent = session.name;
     chatMessages.textContent = "";
     workflowSteps = [];
-    showView("chat");
     updateChatStatus("active");
 
     // Load message history
@@ -225,8 +226,6 @@
     if (eventSource) eventSource.close();
     eventSource = NanoClaw.streamSession(session.id, handleEvent, { fresh: true });
   }
-
-  // -- Chat View --
 
   function appendRawMsg(cls, text) {
     const div = document.createElement("div");
@@ -342,6 +341,30 @@
     }
   }
 
+  async function sendMsg() {
+    let text = msgInput.value.trim();
+    const wfSteps = msgInput.dataset.workflowSteps;
+    if (wfSteps) {
+      const steps = JSON.parse(wfSteps);
+      text = composeWorkflowPrompt(steps) + "\n\nInput: " + text;
+      delete msgInput.dataset.workflowSteps;
+      msgInput.placeholder = "> _";
+    }
+    if (!text || !currentSessionId) return;
+    Notify.markActivity();
+    msgInput.value = "";
+    appendUserMsg(text);
+    try {
+      await NanoClaw.sendMessage(currentSessionId, text);
+      updateChatStatus("working");
+      if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
+        eventSource = NanoClaw.streamSession(currentSessionId, handleEvent);
+      }
+    } catch (err) {
+      appendRawMsg("msg-error", "Failed to send");
+    }
+  }
+
   // -- Monitor View --
 
   async function refreshMonitor() {
@@ -415,8 +438,9 @@
       item.appendChild(label);
 
       item.addEventListener("click", () => {
-        const session = sessions.find((s) => s.id === sid);
-        if (session) openSession(session);
+        activeGroupJid = sid;
+        currentSessionId = sid;
+        showView("chat");
       });
 
       monitorAgents.appendChild(item);
@@ -469,10 +493,8 @@
   let paletteItems = [];
   let paletteIndex = 0;
   let paletteOpen = false;
-  let paletteFromSessions = false;
 
-  async function openPalette(fromSessions) {
-    paletteFromSessions = !!fromSessions;
+  async function openPalette() {
     paletteList.textContent = "";
     paletteItems = [];
     paletteIndex = 0;
@@ -592,11 +614,6 @@
     if (!item) return;
     closePalette();
 
-    if (paletteFromSessions) {
-      createSessionFromPalette(item);
-      return;
-    }
-
     if (item.type === "workflow") {
       if (item.input) {
         msgInput.value = "";
@@ -628,103 +645,14 @@
     }
   }
 
-  async function createSessionFromPalette(item) {
-    if (item.type === "workflow") {
-      if (item.input) {
-        showView("new");
-        initialMsg.value = "";
-        initialMsg.placeholder = item.input + "...";
-        initialMsg.dataset.workflowSteps = JSON.stringify(item.steps);
-        initialMsg.focus();
-      } else {
-        try {
-          const prompt = composeWorkflowPrompt(item.steps);
-          const data = await NanoClaw.createSession("", prompt);
-          openSession({ id: data.session_id, name: data.name, repo: data.repo });
-        } catch (err) {
-          appendRawMsg("msg-error", "Failed to create session");
-        }
-      }
-      return;
-    }
-
-    if (item.type === "template") {
-      showView("new");
-      initialMsg.value = item.prompt;
-      const match = item.prompt.match(/\{[^}]+\}/);
-      if (match) {
-        initialMsg.focus();
-        const start = item.prompt.indexOf(match[0]);
-        initialMsg.setSelectionRange(start, start + match[0].length);
-      }
-      return;
-    }
-
-    try {
-      const data = await NanoClaw.createSession("", item.prompt);
-      openSession({ id: data.session_id, name: data.name, repo: data.repo });
-    } catch (err) {
-      appendRawMsg("msg-error", "Failed to create session");
-    }
-  }
-
-  async function sendMsg() {
-    let text = msgInput.value.trim();
-    const wfSteps = msgInput.dataset.workflowSteps;
-    if (wfSteps) {
-      const steps = JSON.parse(wfSteps);
-      text = composeWorkflowPrompt(steps) + "\n\nInput: " + text;
-      delete msgInput.dataset.workflowSteps;
-      msgInput.placeholder = "> _";
-    }
-    if (!text || !currentSessionId) return;
-    Notify.markActivity();
-    msgInput.value = "";
-    appendUserMsg(text);
-    try {
-      await NanoClaw.sendMessage(currentSessionId, text);
-      updateChatStatus("working");
-      if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
-        eventSource = NanoClaw.streamSession(currentSessionId, handleEvent);
-      }
-    } catch (err) {
-      appendRawMsg("msg-error", "Failed to send");
-    }
-  }
-
-  // -- New Session View --
-
-  async function startSession() {
-    const msg = initialMsg.value.trim();
-    if (!msg) return;
-
-    const wfSteps = initialMsg.dataset.workflowSteps;
-    let finalMsg = msg;
-    if (wfSteps) {
-      const steps = JSON.parse(wfSteps);
-      finalMsg = composeWorkflowPrompt(steps) + "\n\nInput: " + msg;
-      delete initialMsg.dataset.workflowSteps;
-      initialMsg.placeholder = "enter command...";
-    }
-
-    try {
-      const data = await NanoClaw.createSession("", finalMsg);
-      initialMsg.value = "";
-      openSession({ id: data.session_id, name: data.name, repo: data.repo });
-    } catch (err) {
-      appendRawMsg("msg-error", "Failed to create session");
-    }
-  }
-
   // -- Hardware Bindings --
 
   Hardware.bind("scrollUp", () => {
     if (paletteOpen) {
       paletteIndex = Math.max(0, paletteIndex - 1);
       renderPaletteSelection();
-    } else if (currentView === "sessions") {
-      selectedIndex = Math.max(0, selectedIndex - 1);
-      renderSessionList();
+    } else if (currentView === "dashboard") {
+      activityFeed.scrollTop -= 40;
     } else if (currentView === "chat") {
       chatMessages.scrollTop -= 40;
     } else if (currentView === "monitor") {
@@ -736,9 +664,8 @@
     if (paletteOpen) {
       paletteIndex = Math.min(paletteItems.length - 1, paletteIndex + 1);
       renderPaletteSelection();
-    } else if (currentView === "sessions") {
-      selectedIndex = Math.min(sessions.length - 1, selectedIndex + 1);
-      renderSessionList();
+    } else if (currentView === "dashboard") {
+      activityFeed.scrollTop += 40;
     } else if (currentView === "chat") {
       chatMessages.scrollTop += 40;
     } else if (currentView === "monitor") {
@@ -749,10 +676,8 @@
   Hardware.bind("sideClick", () => {
     if (paletteOpen) {
       selectPaletteItem(paletteIndex);
-    } else if (currentView === "sessions" && sessions[selectedIndex]) {
-      openSession(sessions[selectedIndex]);
-    } else if (currentView === "new") {
-      startSession();
+    } else if (currentView === "dashboard") {
+      showView("chat");
     } else if (currentView === "chat") {
       sendMsg();
     }
@@ -846,7 +771,7 @@
 
   // -- Button Handlers --
 
-  document.getElementById("btn-new-session").addEventListener("click", () => showView("new"));
+  document.getElementById("btn-chat").addEventListener("click", () => showView("chat"));
   document.getElementById("btn-back").addEventListener("click", () => {
     if (sttRec) {
       try { sttRec.stop(); } catch (_) {}
@@ -854,10 +779,8 @@
       pttIndicator.classList.add("hidden");
     }
     if (eventSource) eventSource.close();
-    showView("sessions");
+    showView("dashboard");
   });
-  document.getElementById("btn-back-new").addEventListener("click", () => showView("sessions"));
-  document.getElementById("btn-start").addEventListener("click", startSession);
   btnStop.addEventListener("click", async () => {
     if (!currentSessionId) return;
     try {
@@ -869,11 +792,10 @@
       appendRawMsg("msg-error", "Failed to stop");
     }
   });
-  document.getElementById("btn-cmd").addEventListener("click", () => openPalette(false));
+  document.getElementById("btn-cmd").addEventListener("click", () => openPalette());
   document.getElementById("btn-monitor").addEventListener("click", () => showView("monitor"));
-  document.getElementById("btn-back-monitor").addEventListener("click", () => showView("sessions"));
+  document.getElementById("btn-back-monitor").addEventListener("click", () => showView("dashboard"));
   document.getElementById("btn-monitor-refresh").addEventListener("click", refreshMonitor);
-  document.getElementById("btn-cmd-sessions").addEventListener("click", () => openPalette(true));
   document.getElementById("btn-back-palette").addEventListener("click", closePalette);
   msgInput.addEventListener("keydown", (e) => {
     Notify.markActivity();
@@ -884,22 +806,32 @@
 
   async function initialize() {
     const result = NanoClaw.initFromUrl();
-    if (result.ok) {
-      showView("sessions");
+    if (!result.ok) {
+      const errDiv = document.createElement("div");
+      errDiv.className = "empty-state";
+      errDiv.textContent = "ERR: " + result.reason;
+      activityFeed.appendChild(errDiv);
+
+      const debug = document.createElement("div");
+      debug.className = "empty-state";
+      debug.style.fontSize = "10px";
+      debug.style.wordBreak = "break-all";
+      debug.textContent = window.location.href;
+      activityFeed.appendChild(debug);
       return;
     }
-    sessionList.textContent = "";
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = "ERR: " + result.reason;
-    sessionList.appendChild(empty);
+    showView("dashboard");
+    refreshVoiceStatus();
+    voicePollTimer = setInterval(refreshVoiceStatus, 5000);
 
-    const debug = document.createElement("div");
-    debug.className = "empty-state";
-    debug.style.fontSize = "10px";
-    debug.style.wordBreak = "break-all";
-    debug.textContent = window.location.href;
-    sessionList.appendChild(debug);
+    // Auto-detect active group
+    try {
+      const sessions = await NanoClaw.listSessions();
+      if (sessions.length > 0) {
+        activeGroupJid = sessions[0].id;
+        startActivityPolling();
+      }
+    } catch { /* offline */ }
   }
 
   initialize();
