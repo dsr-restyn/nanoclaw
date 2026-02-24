@@ -80,7 +80,16 @@ ls dist/static/creation/index.html
 
 Build must be clean and static files must exist in `dist/`.
 
-## Phase 5: Create Device Token
+## Phase 5: Rebuild Container
+
+The skills modified `container/agent-runner/src/index.ts` (tool event streaming).
+Rebuild so the container picks up these changes:
+
+```bash
+./container/build.sh
+```
+
+## Phase 6: Create Device Token
 
 Create an initial device token for the R1:
 
@@ -92,7 +101,7 @@ Show the user the printed token and remind them to save it — it cannot be retr
 
 Create additional tokens anytime with `npx tsx scripts/create-token.ts <label>`.
 
-## Phase 6: Configure Environment
+## Phase 7: Configure Environment
 
 Create or update `.env` (or the environment config for your deployment):
 
@@ -103,7 +112,7 @@ WHATSAPP_ENABLED=false
 VOICE_ENABLED=true
 ```
 
-## Phase 7: HTTPS Setup
+## Phase 8: HTTPS Setup
 
 The R1 requires HTTPS for Creation WebViews and WSS for voice. Ask the user
 how they want to expose NanoClaw using `AskUserQuestion`:
@@ -212,7 +221,7 @@ to `localhost:4080`. The end result is an HTTPS URL. Record it.
 Tell the user they can test locally at `http://localhost:4080` but pairing a physical
 R1 will need HTTPS. They can run this phase later.
 
-## Phase 8: Start & Verify
+## Phase 9: Start & Verify
 
 Start NanoClaw:
 
@@ -222,7 +231,7 @@ npm start
 
 Do NOT attempt to test the API with curl — JSON body parsing over the Bash tool is unreliable. Instead, tell the user to open the pairing page directly.
 
-## Phase 9: Done
+## Phase 10: Done
 
 Tell the user:
 
