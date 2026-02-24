@@ -80,38 +80,6 @@ ls dist/static/creation/index.html
 
 Build must be clean and static files must exist in `dist/`.
 
-## Phase 4b: Make Channel Creation Conditional
-
-The skill patches add HTTP channel support to `src/index.ts` but leave WhatsApp
-unconditionally created and connected. Since this is an R1-only setup (no WhatsApp),
-`src/index.ts` must conditionally create channels based on config flags.
-
-In `src/index.ts`, make the following changes:
-
-1. **Remove the static WhatsApp import** (`import { WhatsAppChannel } from './channels/whatsapp.js'`).
-   Remove the top-level `let whatsapp: WhatsAppChannel` variable.
-   Add `WHATSAPP_ENABLED`, `HTTP_CHANNEL_ENABLED`, and `HTTP_PORT` to the config import.
-
-2. **Replace the unconditional channel creation** in `main()`. Instead of always creating
-   `new WhatsAppChannel(...)` and calling `connect()`, wrap it in `if (WHATSAPP_ENABLED)` with a
-   dynamic `await import('./channels/whatsapp.js')`. Do the same for HTTP: wrap in
-   `if (HTTP_CHANNEL_ENABLED)` with a dynamic `await import('./channels/http.js')`, creating an
-   `HttpChannel` with `port: HTTP_PORT`, the shared callbacks, plus
-   `enqueueCheck: (jid) => queue.enqueueMessageCheck(jid)` and `registerGroup`.
-
-3. **Add a guard** after channel creation: if `channels.length === 0`, log a fatal error
-   and exit — at least one channel must be enabled.
-
-4. **Fix `syncGroupMetadata` in the IPC watcher** — it references the old `whatsapp` variable.
-   Replace it with a lookup: `channels.find((c) => c.name === 'whatsapp')` cast to
-   `WhatsAppChannel`, falling back to `Promise.resolve()` if WhatsApp is not active.
-
-Verify:
-
-```bash
-npm run build
-```
-
 ## Phase 5: Apply Tool Events (optional)
 
 This adds "Agent is using Bash..." progress indicators to the Creation activity

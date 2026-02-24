@@ -12,5 +12,6 @@ structured:
   npm_dependencies: {}
   env_additions: []
 conflicts: []
-depends: []
+depends:
+  - http-channel
 test: "npm run build"

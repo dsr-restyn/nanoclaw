@@ -3,12 +3,14 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
+  HTTP_CHANNEL_ENABLED,
+  HTTP_PORT,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
   TRIGGER_PATTERN,
+  WHATSAPP_ENABLED,
 } from './config.js';
-import { WhatsAppChannel } from './channels/whatsapp.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -30,6 +32,7 @@ import {
   setSession,
   storeChatMetadata,
   storeMessage,
+  storeMessageDirect,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
@@ -48,7 +51,6 @@ let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
-let whatsapp: WhatsAppChannel;
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 
@@ -457,9 +459,32 @@ async function main(): Promise<void> {
   };
 
   // Create and connect channels
-  whatsapp = new WhatsAppChannel(channelOpts);
-  channels.push(whatsapp);
-  await whatsapp.connect();
+  if (WHATSAPP_ENABLED) {
+    const { WhatsAppChannel } = await import('./channels/whatsapp.js');
+    const whatsapp = new WhatsAppChannel(channelOpts);
+    channels.push(whatsapp);
+    await whatsapp.connect();
+  } else {
+    logger.info('WhatsApp channel disabled');
+  }
+
+  // HTTP/SSE channel (optional — enabled via HTTP_CHANNEL_ENABLED)
+  if (HTTP_CHANNEL_ENABLED) {
+    const { HttpChannel } = await import('./channels/http.js');
+    const httpChannel = new HttpChannel({
+      port: HTTP_PORT,
+      ...channelOpts,
+      enqueueCheck: (jid: string) => queue.enqueueMessageCheck(jid),
+      registerGroup,
+    });
+    channels.push(httpChannel);
+    await httpChannel.connect();
+  }
+
+  if (channels.length === 0) {
+    logger.fatal('No channels enabled. Set WHATSAPP_ENABLED=true or HTTP_CHANNEL_ENABLED=true');
+    process.exit(1);
+  }
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({
@@ -485,7 +510,10 @@ async function main(): Promise<void> {
     },
     registeredGroups: () => registeredGroups,
     registerGroup,
-    syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
+    syncGroupMetadata: (force) => {
+      const wa = channels.find((c) => c.name === 'whatsapp') as import('./channels/whatsapp.js').WhatsAppChannel | undefined;
+      return wa?.syncGroupMetadata(force) ?? Promise.resolve();
+    },
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
   });

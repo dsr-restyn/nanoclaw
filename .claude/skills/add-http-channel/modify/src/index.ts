@@ -11,7 +11,6 @@ import {
   TRIGGER_PATTERN,
   WHATSAPP_ENABLED,
 } from './config.js';
-import { WhatsAppChannel } from './channels/whatsapp.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -52,7 +51,6 @@ let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
-let whatsapp: WhatsAppChannel;
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 
@@ -450,7 +448,8 @@ async function main(): Promise<void> {
 
   // Create and connect channels
   if (WHATSAPP_ENABLED) {
-    whatsapp = new WhatsAppChannel(channelOpts);
+    const { WhatsAppChannel } = await import('./channels/whatsapp.js');
+    const whatsapp = new WhatsAppChannel(channelOpts);
     channels.push(whatsapp);
     await whatsapp.connect();
   } else {
@@ -468,6 +467,11 @@ async function main(): Promise<void> {
     });
     channels.push(httpChannel);
     await httpChannel.connect();
+  }
+
+  if (channels.length === 0) {
+    logger.fatal('No channels enabled. Set WHATSAPP_ENABLED=true or HTTP_CHANNEL_ENABLED=true');
+    process.exit(1);
   }
 
   // Start subsystems (independently of connection handler)
@@ -494,7 +498,10 @@ async function main(): Promise<void> {
     },
     registeredGroups: () => registeredGroups,
     registerGroup,
-    syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata?.(force) ?? Promise.resolve(),
+    syncGroupMetadata: (force) => {
+      const wa = channels.find((c) => c.name === 'whatsapp') as import('./channels/whatsapp.js').WhatsAppChannel | undefined;
+      return wa?.syncGroupMetadata(force) ?? Promise.resolve();
+    },
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
   });
