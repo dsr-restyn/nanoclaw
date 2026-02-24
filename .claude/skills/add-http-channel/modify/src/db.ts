@@ -83,6 +83,15 @@ function createSchema(database: Database.Database): void {
       label TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS voice_sessions (
+      device_id       TEXT PRIMARY KEY,
+      token_hash      TEXT NOT NULL,
+      group_jid       TEXT NOT NULL,
+      last_ip         TEXT,
+      connected_at    TEXT,
+      disconnected_at TEXT,
+      drop_count      INTEGER DEFAULT 0
+    );
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -722,4 +731,71 @@ export function getHttpGroupMessages(
     ...r,
     is_from_me: r.is_from_me === 1,
   }));
+}
+
+// --- Voice session persistence ---
+
+export interface VoiceSession {
+  device_id: string;
+  token_hash: string;
+  group_jid: string;
+  last_ip: string | null;
+  connected_at: string | null;
+  disconnected_at: string | null;
+  drop_count: number;
+}
+
+export function upsertVoiceSession(
+  deviceId: string,
+  tokenHash: string,
+  groupJid: string,
+  ip: string,
+): void {
+  db.prepare(`
+    INSERT INTO voice_sessions (device_id, token_hash, group_jid, last_ip, connected_at, disconnected_at, drop_count)
+    VALUES (?, ?, ?, ?, ?, NULL, 0)
+    ON CONFLICT(device_id) DO UPDATE SET
+      token_hash = excluded.token_hash,
+      group_jid = excluded.group_jid,
+      last_ip = excluded.last_ip,
+      connected_at = excluded.connected_at,
+      disconnected_at = NULL
+  `).run(deviceId, tokenHash, groupJid, ip, new Date().toISOString());
+}
+
+export function disconnectVoiceSession(deviceId: string): void {
+  db.prepare(`
+    UPDATE voice_sessions
+    SET disconnected_at = ?
+    WHERE device_id = ?
+  `).run(new Date().toISOString(), deviceId);
+}
+
+export function findRecentVoiceSession(
+  ip: string,
+  graceMs: number,
+): VoiceSession | undefined {
+  const cutoff = new Date(Date.now() - graceMs).toISOString();
+  return db.prepare(`
+    SELECT * FROM voice_sessions
+    WHERE last_ip = ? AND disconnected_at IS NOT NULL AND disconnected_at > ?
+    ORDER BY disconnected_at DESC
+    LIMIT 1
+  `).get(ip, cutoff) as VoiceSession | undefined;
+}
+
+export function incrementVoiceDropCount(deviceId: string): void {
+  db.prepare(`
+    UPDATE voice_sessions
+    SET drop_count = drop_count + 1, connected_at = ?, disconnected_at = NULL
+    WHERE device_id = ?
+  `).run(new Date().toISOString(), deviceId);
+}
+
+export function getVoiceStatus(): VoiceSession | undefined {
+  return db.prepare(`
+    SELECT * FROM voice_sessions
+    ORDER BY COALESCE(connected_at, disconnected_at) DESC
+    LIMIT 1
+  `).get() as VoiceSession | undefined;
 }
