@@ -348,6 +348,26 @@ function setupSession(
         is_bot_message: false,
       });
       opts.enqueueCheck(jid);
+    } else if (parsed.type === 'req') {
+      // Acknowledge unknown requests so R1 doesn't consider session dead
+      const reqId = (parsed.id as string) || '';
+      logger.info(
+        { deviceId, method: parsed.method, id: reqId },
+        'Voice: unknown req acknowledged',
+      );
+      try {
+        socket.send(JSON.stringify({
+          type: 'res',
+          id: reqId,
+          ok: true,
+          payload: {},
+        }));
+      } catch { /* disconnected */ }
+    } else if (parsed.type === 'event') {
+      logger.debug(
+        { deviceId, event: parsed.event },
+        'Voice: client event received',
+      );
     }
   });
 
