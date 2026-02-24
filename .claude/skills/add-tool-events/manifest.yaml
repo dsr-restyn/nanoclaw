@@ -1,0 +1,16 @@
+skill: tool-events
+version: 1.0.0
+description: "Stream agent tool use events (progress indicators) to channels"
+core_version: 0.1.0
+adds: []
+modifies:
+  - src/types.ts
+  - src/container-runner.ts
+  - src/index.ts
+  - container/agent-runner/src/index.ts
+structured:
+  npm_dependencies: {}
+  env_additions: []
+conflicts: []
+depends: []
+test: "npm run build"

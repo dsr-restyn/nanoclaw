@@ -80,13 +80,27 @@ ls dist/static/creation/index.html
 
 Build must be clean and static files must exist in `dist/`.
 
-## Phase 5: Rebuild Container
+## Phase 5: Apply Tool Events (optional)
 
-The skills modified `container/agent-runner/src/index.ts` (tool event streaming).
-Rebuild so the container picks up these changes:
+This adds "Agent is using Bash..." progress indicators to the Creation activity
+feed. It requires a container rebuild, so skip if you want faster setup.
+
+```bash
+npx tsx scripts/apply-skill.ts .claude/skills/add-tool-events
+```
+
+If applied, rebuild the container:
 
 ```bash
 ./container/build.sh
+```
+
+If skipped, no container rebuild is needed — the base container from Phase 1 works.
+
+Verify:
+
+```bash
+npm run build
 ```
 
 ## Phase 6: Create Device Token

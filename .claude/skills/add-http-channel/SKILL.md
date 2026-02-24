@@ -45,9 +45,6 @@ This deterministically:
 - Three-way merges token auth into `src/db.ts` (http_device_tokens table, CRUD functions)
 - Three-way merges channel config into `src/config.ts` (HTTP_CHANNEL_ENABLED, HTTP_PORT, WHATSAPP_ENABLED)
 - Three-way merges HTTP channel registration into `src/index.ts`
-- Three-way merges `sendProgress`/`sendResult` into Channel interface in `src/types.ts`
-- Three-way merges `ContainerOutput` event fields into `src/container-runner.ts`
-- Three-way merges tool event streaming into `container/agent-runner/src/index.ts`
 - Installs `fastify` and `@fastify/cors` npm dependencies
 - Updates `.env.example` with `HTTP_CHANNEL_ENABLED`, `HTTP_PORT`, `WHATSAPP_ENABLED`
 - Records the application in `.nanoclaw/state.yaml`
@@ -55,18 +52,7 @@ This deterministically:
 If the apply reports merge conflicts, read the intent files:
 - `modify/src/db.ts.intent.md` — token table and functions
 - `modify/src/config.ts.intent.md` — channel config exports
-- `modify/src/index.ts.intent.md` — channel registration and tool event routing
-- `modify/src/types.ts.intent.md` — Channel interface extensions
-- `modify/src/container-runner.ts.intent.md` — ContainerOutput event fields
-- `modify/container/agent-runner/src/index.ts.intent.md` — tool event streaming
-
-### Rebuild container
-
-The agent runner changes require a container rebuild:
-
-```bash
-./container/build.sh
-```
+- `modify/src/index.ts.intent.md` — channel registration
 
 ### Validate
 
