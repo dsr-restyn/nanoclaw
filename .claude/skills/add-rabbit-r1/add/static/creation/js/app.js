@@ -1,5 +1,5 @@
 /**
- * Warren R1 Creation -- main app logic.
+ * NanoClaw R1 Creation -- main app logic.
  * View router, session list, chat rendering.
  */
 (() => {
@@ -75,7 +75,7 @@
 
   async function refreshSessions() {
     try {
-      sessions = await Warren.listSessions();
+      sessions = await NanoClaw.listSessions();
       renderSessionList();
       connDot.className = "dot dot-green";
     } catch (err) {
@@ -179,7 +179,7 @@
 
       delBtn.addEventListener("click", async () => {
         try {
-          await Warren.deleteSession(s.id);
+          await NanoClaw.deleteSession(s.id);
           wrapper.style.transition = "opacity 0.2s, max-height 0.2s";
           wrapper.style.opacity = "0";
           wrapper.style.maxHeight = "0";
@@ -209,7 +209,7 @@
 
     // Load message history
     try {
-      const messages = await Warren.fetchSessionMessages(session.id);
+      const messages = await NanoClaw.fetchSessionMessages(session.id);
       messages.forEach((msg) => {
         if (msg.role === "user") {
           appendUserMsg(msg.content);
@@ -223,7 +223,7 @@
     renderStepProgress();
 
     if (eventSource) eventSource.close();
-    eventSource = Warren.streamSession(session.id, handleEvent, { fresh: true });
+    eventSource = NanoClaw.streamSession(session.id, handleEvent, { fresh: true });
   }
 
   // -- Chat View --
@@ -348,9 +348,9 @@
     monitorStatus.className = "dot dot-yellow";
     try {
       const [health, agents, tasks] = await Promise.all([
-        Warren.fetchMonitorHealth(),
-        Warren.fetchMonitorAgents(),
-        Warren.fetchMonitorTasks(),
+        NanoClaw.fetchMonitorHealth(),
+        NanoClaw.fetchMonitorAgents(),
+        NanoClaw.fetchMonitorTasks(),
       ]);
       renderMonitorHealth(health);
       renderMonitorAgents(agents);
@@ -480,8 +480,8 @@
 
     try {
       const [cmds, history] = await Promise.all([
-        Warren.fetchCommands(),
-        Warren.fetchHistory(),
+        NanoClaw.fetchCommands(),
+        NanoClaw.fetchHistory(),
       ]);
 
       if (cmds.actions.length > 0) {
@@ -639,7 +639,7 @@
       } else {
         try {
           const prompt = composeWorkflowPrompt(item.steps);
-          const data = await Warren.createSession("", prompt);
+          const data = await NanoClaw.createSession("", prompt);
           openSession({ id: data.session_id, name: data.name, repo: data.repo });
         } catch (err) {
           appendRawMsg("msg-error", "Failed to create session");
@@ -661,7 +661,7 @@
     }
 
     try {
-      const data = await Warren.createSession("", item.prompt);
+      const data = await NanoClaw.createSession("", item.prompt);
       openSession({ id: data.session_id, name: data.name, repo: data.repo });
     } catch (err) {
       appendRawMsg("msg-error", "Failed to create session");
@@ -682,10 +682,10 @@
     msgInput.value = "";
     appendUserMsg(text);
     try {
-      await Warren.sendMessage(currentSessionId, text);
+      await NanoClaw.sendMessage(currentSessionId, text);
       updateChatStatus("working");
       if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
-        eventSource = Warren.streamSession(currentSessionId, handleEvent);
+        eventSource = NanoClaw.streamSession(currentSessionId, handleEvent);
       }
     } catch (err) {
       appendRawMsg("msg-error", "Failed to send");
@@ -708,7 +708,7 @@
     }
 
     try {
-      const data = await Warren.createSession("", finalMsg);
+      const data = await NanoClaw.createSession("", finalMsg);
       initialMsg.value = "";
       openSession({ id: data.session_id, name: data.name, repo: data.repo });
     } catch (err) {
@@ -861,7 +861,7 @@
   btnStop.addEventListener("click", async () => {
     if (!currentSessionId) return;
     try {
-      await Warren.stopSession(currentSessionId);
+      await NanoClaw.stopSession(currentSessionId);
       btnStop.classList.add("hidden");
       updateChatStatus("waiting");
       appendRawMsg("msg-result", "Agent stopped");
@@ -883,7 +883,7 @@
   // -- Init --
 
   async function initialize() {
-    const result = Warren.initFromUrl();
+    const result = NanoClaw.initFromUrl();
     if (result.ok) {
       showView("sessions");
       return;
