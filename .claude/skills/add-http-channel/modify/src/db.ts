@@ -711,9 +711,9 @@ export function getHttpGroupMessages(
   jid: string,
   since: string,
   limit: number,
-): Array<{ id: string; sender: string; sender_name: string; content: string; timestamp: string; is_from_me: boolean }> {
+): Array<{ id: string; sender: string; sender_name: string; content: string; timestamp: string; is_from_me: boolean; is_bot_message: boolean }> {
   const sql = `
-    SELECT id, sender, sender_name, content, timestamp, is_from_me
+    SELECT id, sender, sender_name, content, timestamp, is_from_me, is_bot_message
     FROM messages
     WHERE chat_jid = ? AND (? = '' OR timestamp > ?)
     ORDER BY timestamp DESC
@@ -726,10 +726,12 @@ export function getHttpGroupMessages(
     content: string;
     timestamp: string;
     is_from_me: number;
+    is_bot_message: number;
   }>;
   return rows.reverse().map((r) => ({
     ...r,
     is_from_me: r.is_from_me === 1,
+    is_bot_message: r.is_bot_message === 1,
   }));
 }
 

@@ -90,7 +90,7 @@ export class HttpChannel implements Channel {
 
   constructor(opts: HttpChannelOpts) {
     this.opts = opts;
-    this.server = Fastify({ logger: false });
+    this.server = Fastify({ logger: false, trustProxy: true });
   }
 
   // ── Channel interface ────────────────────────────────────────────
@@ -145,6 +145,16 @@ export class HttpChannel implements Channel {
     const event: GroupEvent = { type: 'text', content: text };
     this.ssePush(jid, 'text', event);
     this.bus.emit('event', jid, event);
+    storeMessageDirect({
+      id: randomUUID(),
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: text,
+      timestamp: new Date().toISOString(),
+      is_from_me: true,
+      is_bot_message: true,
+    });
   }
 
   async sendProgress(
@@ -155,12 +165,32 @@ export class HttpChannel implements Channel {
     const event: GroupEvent = { type: 'tool', tool, summary };
     this.ssePush(jid, 'tool', event);
     this.bus.emit('event', jid, event);
+    storeMessageDirect({
+      id: randomUUID(),
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: `[tool: ${tool}] ${summary}`,
+      timestamp: new Date().toISOString(),
+      is_from_me: true,
+      is_bot_message: true,
+    });
   }
 
   async sendResult(jid: string, summary: string): Promise<void> {
     const event: GroupEvent = { type: 'result', summary };
     this.ssePush(jid, 'result', event);
     this.bus.emit('event', jid, event);
+    storeMessageDirect({
+      id: randomUUID(),
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: summary,
+      timestamp: new Date().toISOString(),
+      is_from_me: true,
+      is_bot_message: true,
+    });
   }
 
   async setTyping(jid: string, isTyping: boolean): Promise<void> {

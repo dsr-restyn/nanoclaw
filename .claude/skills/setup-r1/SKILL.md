@@ -212,41 +212,15 @@ to `localhost:4080`. The end result is an HTTPS URL. Record it.
 Tell the user they can test locally at `http://localhost:4080` but pairing a physical
 R1 will need HTTPS. They can run this phase later.
 
-## Phase 8: Verify
+## Phase 8: Start & Verify
 
-Start NanoClaw and verify everything works:
+Start NanoClaw:
 
 ```bash
 npm start
 ```
 
-In another terminal, test:
-
-```bash
-# Health check
-curl http://localhost:4080/health
-
-# List groups (should be empty)
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:4080/groups
-
-# Create a group
-curl -X POST http://localhost:4080/groups \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello!", "name": "Test"}'
-```
-
-If HTTPS is configured, also verify through the public URL:
-```bash
-curl https://YOUR_PUBLIC_URL/health
-```
-
-Open the pairing page in a browser:
-```
-https://YOUR_PUBLIC_URL/pair?token=YOUR_TOKEN
-```
-
-(Or `http://localhost:4080/pair?token=YOUR_TOKEN` for local testing.)
+Do NOT attempt to test the API with curl — JSON body parsing over the Bash tool is unreliable. Instead, tell the user to open the pairing page directly.
 
 ## Phase 9: Done
 
@@ -257,13 +231,13 @@ Tell the user:
 > **Pair your R1:**
 > Open the admin pairing page on your computer or phone:
 > `https://YOUR_PUBLIC_URL/pair?token=YOUR_TOKEN`
+> (Or `http://localhost:4080/pair?token=YOUR_TOKEN` for local testing.)
 >
 > It shows two QR codes — scan them with your R1:
 > - **Creation QR** — installs the WebView UI on the R1
 > - **Voice QR** — pairs push-to-talk (if VOICE_ENABLED=true)
 >
 > **Your device token:** `YOUR_TOKEN` — save it, it's only shown once.
-> Create more tokens by messaging the agent:
-> "Create an HTTP device token called 'my-other-device'"
+> Create more tokens anytime with: `npx tsx scripts/create-token.ts <label>`
 >
 > **Health check:** `curl https://YOUR_PUBLIC_URL/health`
