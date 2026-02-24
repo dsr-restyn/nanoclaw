@@ -6,11 +6,18 @@
  * back as chat events for TTS.
  */
 
-import { randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import type { WebSocket, RawData } from 'ws';
 
 import { logger } from '../../logger.js';
-import { storeMessageDirect, validateHttpToken } from '../../db.js';
+import {
+  storeMessageDirect,
+  validateHttpToken,
+  upsertVoiceSession,
+  disconnectVoiceSession,
+  findRecentVoiceSession,
+  incrementVoiceDropCount,
+} from '../../db.js';
 import type { HttpChannel, GroupEvent } from '../http.js';
 import {
   buildChallenge,
@@ -23,9 +30,10 @@ import {
 } from './voice-protocol.js';
 
 
-const TICK_INTERVAL = 15_000;
+const TICK_INTERVAL = 10_000;
 const IDLE_FINAL_TIMEOUT = 5_000;
 const WS_PING_INTERVAL = 30_000;
+const RECONNECT_GRACE_MS = 10 * 60 * 1000; // 10 minutes
 
 // In-memory map: device token prefix → group JID.
 // Survives across WS reconnects within the same process.
@@ -36,6 +44,7 @@ const deviceGroups = new Map<string, string>();
 export async function voiceHandler(
   socket: WebSocket,
   channel: HttpChannel,
+  clientIp: string,
 ): Promise<void> {
   const opts = channel.opts;
 
@@ -66,6 +75,35 @@ export async function voiceHandler(
   const token =
     (auth.token as string) || (auth.deviceToken as string) || '';
 
+  if (!token) {
+    // Empty token — attempt IP-based session resume
+    const recent = findRecentVoiceSession(clientIp, RECONNECT_GRACE_MS);
+    if (recent) {
+      const deviceId = recent.device_id;
+      incrementVoiceDropCount(deviceId);
+      socket.send(
+        JSON.stringify(buildHelloOk(requestId, `resumed:${deviceId}`)),
+      );
+      logger.info(
+        { deviceId, clientIp, dropCount: recent.drop_count + 1 },
+        'Voice session resumed via IP match',
+      );
+      setupSession(socket, channel, deviceId, recent.group_jid || null, clientIp);
+      return;
+    }
+
+    // No IP match — reject
+    logger.warn(
+      { tokenLength: 0, clientIp },
+      'Voice handshake: empty token and no recent session for IP',
+    );
+    socket.send(
+      JSON.stringify(buildHelloError(requestId, 'invalid token')),
+    );
+    socket.close();
+    return;
+  }
+
   if (!validateHttpToken(token)) {
     const preview = token.slice(0, 8) || '(empty)';
     logger.warn(
@@ -80,12 +118,30 @@ export async function voiceHandler(
   }
 
   const deviceId = token.slice(0, 8);
+  const tokenHash = createHash('sha256').update(token).digest('hex');
   socket.send(JSON.stringify(buildHelloOk(requestId, token)));
   logger.info({ deviceId }, 'Voice authenticated');
 
+  upsertVoiceSession(deviceId, tokenHash, '', clientIp);
+  setupSession(socket, channel, deviceId, null, clientIp);
+}
+
+// ── Session setup ─────────────────────────────────────────────────────
+
+function setupSession(
+  socket: WebSocket,
+  channel: HttpChannel,
+  deviceId: string,
+  resumeJid: string | null,
+  clientIp: string,
+): void {
+  const opts = channel.opts;
+  const connectTime = Date.now();
+
   // ── Session state ────────────────────────────────────────────────
 
-  let activeJid: string | null = deviceGroups.get(deviceId) || null;
+  let activeJid: string | null =
+    resumeJid || deviceGroups.get(deviceId) || null;
   let runId = randomUUID().slice(0, 12);
   let chatSeq = 0;
   let clientSessionKey = 'main';
@@ -111,6 +167,7 @@ export async function voiceHandler(
     if (httpGroups.length > 0) {
       activeJid = httpGroups[0][0];
       deviceGroups.set(deviceId, activeJid);
+      upsertVoiceSession(deviceId, '', activeJid, clientIp);
       return activeJid;
     }
 
@@ -134,6 +191,7 @@ export async function voiceHandler(
     );
     activeJid = jid;
     deviceGroups.set(deviceId, jid);
+    upsertVoiceSession(deviceId, '', jid, clientIp);
     return jid;
   }
 
@@ -296,7 +354,9 @@ export async function voiceHandler(
   // ── Cleanup ────────────────────────────────────────────────────
 
   socket.on('close', () => {
-    logger.info({ deviceId }, 'Voice client disconnected');
+    const duration = Math.round((Date.now() - connectTime) / 1000);
+    logger.info({ deviceId, duration }, 'Voice client disconnected');
+    disconnectVoiceSession(deviceId);
     clearInterval(tickInterval);
     clearInterval(pingInterval);
     if (idleTimer) clearTimeout(idleTimer);
