@@ -85,27 +85,12 @@ Build must be clean and static files must exist in `dist/`.
 Create an initial device token for the R1:
 
 ```bash
-node -e "
-  const { createHttpToken } = require('./dist/db.js');
-  const { initDatabase } = require('./dist/db.js');
-  initDatabase();
-  const token = createHttpToken('r1-device');
-  console.log('Device token (save this!):', token);
-"
+npx tsx scripts/create-token.ts r1-device
 ```
 
-If this fails because the DB uses ES modules, use this instead:
+Show the user the printed token and remind them to save it — it cannot be retrieved later.
 
-```bash
-node --input-type=module -e "
-  import { initDatabase, createHttpToken } from './dist/db.js';
-  initDatabase();
-  const token = createHttpToken('r1-device');
-  console.log('Device token (save this!):', token);
-"
-```
-
-Save the printed token — it's only shown once.
+Create additional tokens anytime with `npx tsx scripts/create-token.ts <label>`.
 
 ## Phase 6: Configure Environment
 

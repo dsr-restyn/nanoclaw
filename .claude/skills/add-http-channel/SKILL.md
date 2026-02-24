@@ -62,7 +62,17 @@ npm run build
 
 Build must be clean before proceeding.
 
-## Phase 3: Done
+## Phase 3: Create Device Token
+
+Create an initial device token so the user can authenticate:
+
+```bash
+npx tsx scripts/create-token.ts my-device
+```
+
+Show the user the printed token and remind them to save it — it cannot be retrieved later.
+
+## Phase 4: Done
 
 Tell the user:
 
@@ -74,14 +84,9 @@ Tell the user:
 > WHATSAPP_ENABLED=false    # optional — set to false for HTTP-only deploys
 > ```
 >
-> **Create a device token** by messaging the agent:
-> "Create an HTTP device token called 'my-device'"
->
-> Or programmatically:
-> ```typescript
-> import { createHttpToken } from './db.js';
-> const token = createHttpToken('my-device');
-> console.log(token); // save this — shown only once
+> **Create more tokens anytime:**
+> ```bash
+> npx tsx scripts/create-token.ts <label>
 > ```
 >
 > **Test:**

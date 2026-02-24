@@ -4,6 +4,7 @@ description: "HTTP/SSE channel with REST API and Bearer token auth"
 core_version: 0.1.0
 adds:
   - src/channels/http.ts
+  - scripts/create-token.ts
 modifies:
   - src/db.ts
   - src/config.ts
