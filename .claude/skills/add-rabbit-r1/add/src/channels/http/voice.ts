@@ -33,7 +33,7 @@ import {
 const TICK_INTERVAL = 10_000;
 const IDLE_FINAL_TIMEOUT = 5_000;
 const WS_PING_INTERVAL = 30_000;
-const RECONNECT_GRACE_MS = 10 * 60 * 1000; // 10 minutes
+const RECONNECT_GRACE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // In-memory map: device token prefix → group JID.
 // Survives across WS reconnects within the same process.
