@@ -189,6 +189,23 @@ const NanoClaw = (() => {
     return { status: "ok" };
   }
 
+  async function fetchVoiceStatus() {
+    return _fetch("/voice/status");
+  }
+
+  async function fetchGroupActivity(sessionId, since) {
+    const params = since ? "?since=" + encodeURIComponent(since) : "";
+    const msgs = await _fetch("/groups/" + _enc(sessionId) + "/messages" + params);
+    return msgs.map(function(m) {
+      return {
+        type: m.is_bot_message ? "text" : "user",
+        content: m.content,
+        timestamp: m.timestamp,
+        sender: m.sender_name,
+      };
+    });
+  }
+
   return {
     init,
     initFromUrl,
@@ -207,6 +224,8 @@ const NanoClaw = (() => {
     fetchMonitorTasks,
     pauseTask,
     resumeTask,
+    fetchVoiceStatus,
+    fetchGroupActivity,
     get serverUrl() { return _serverUrl; },
     get connected() { return !!_token; },
   };
