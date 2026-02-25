@@ -1,0 +1,20 @@
+skill: runtime-updates
+version: 1.0.0
+description: "Agent-initiated runtime updates with human approval — git pull, skill apply, config changes, container rebuild"
+core_version: 0.1.0
+adds:
+  - src/runtime-update-executor.ts
+  - src/runtime-updates.test.ts
+  - src/runtime-update-executor.test.ts
+modifies:
+  - src/types.ts
+  - src/db.ts
+  - src/ipc.ts
+  - src/index.ts
+  - src/ipc-auth.test.ts
+structured:
+  npm_dependencies: {}
+  env_additions: []
+conflicts: []
+depends: []
+test: "npx vitest run src/runtime-updates.test.ts src/runtime-update-executor.test.ts src/ipc-auth.test.ts"
