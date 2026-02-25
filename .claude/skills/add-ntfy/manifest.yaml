@@ -1,0 +1,16 @@
+skill: ntfy
+version: 1.0.0
+description: "Push notifications via ntfy.sh — agents can send alerts from any group"
+core_version: 0.1.0
+adds:
+  - container/skills/ntfy-notifications/SKILL.md
+modifies:
+  - src/config.ts
+  - src/container-runner.ts
+structured:
+  npm_dependencies: {}
+  env_additions:
+    - NTFY_TOPIC
+conflicts: []
+depends: []
+test: "npm run build"
