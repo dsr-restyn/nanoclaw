@@ -21,7 +21,7 @@ describe('runtime update CRUD', () => {
       reason: 'upstream fix',
     });
 
-    const update = getRuntimeUpdate(id);
+    const update = getRuntimeUpdate(id!);
     expect(update).toBeDefined();
     expect(update!.group_folder).toBe('trading');
     expect(update!.action).toBe('git_pull');

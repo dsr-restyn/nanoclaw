@@ -862,6 +862,6 @@ export function resolveRuntimeUpdate(
 export function getExpiredRuntimeUpdates(maxAgeMs: number): RuntimeUpdate[] {
   const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
   return db.prepare(
-    `SELECT * FROM runtime_updates WHERE status = 'pending' AND created_at < ?`,
+    `SELECT * FROM runtime_updates WHERE status = 'pending' AND created_at <= ?`,
   ).all(cutoff) as RuntimeUpdate[];
 }
