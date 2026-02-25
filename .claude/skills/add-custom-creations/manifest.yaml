@@ -1,0 +1,21 @@
+skill: custom-creations
+version: 1.0.0
+description: "Scaffold custom R1 Creation dashboards with their own agent groups"
+core_version: 0.1.0
+adds:
+  - static/_creation-template/index.html
+  - static/_creation-template/css/styles.css
+  - static/_creation-template/js/api.js
+  - static/_creation-template/js/hardware.js
+  - static/_creation-template/js/app.js
+  - static/_creation-template/creation.json.template
+  - scripts/create-creation.ts
+modifies:
+  - src/channels/http.ts
+structured:
+  npm_dependencies: {}
+  env_additions: []
+conflicts: []
+depends:
+  - rabbit-r1
+test: "npm run build"
