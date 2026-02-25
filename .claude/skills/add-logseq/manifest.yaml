@@ -1,0 +1,16 @@
+skill: logseq
+version: 1.0.0
+description: "Logseq knowledge graph — agents can read/write pages, journals, and notes"
+core_version: 0.1.0
+adds:
+  - container/skills/logseq/SKILL.md
+modifies:
+  - src/config.ts
+  - src/container-runner.ts
+structured:
+  npm_dependencies: {}
+  env_additions:
+    - LOGSEQ_GRAPH_PATH
+conflicts: []
+depends: []
+test: "npm run build"
