@@ -175,11 +175,15 @@ function buildVolumeMounts(
 
   // Logseq knowledge graph (read-write for all groups)
   if (LOGSEQ_GRAPH_PATH) {
-    mounts.push({
-      hostPath: LOGSEQ_GRAPH_PATH,
-      containerPath: '/workspace/logseq',
-      readonly: false,
-    });
+    if (fs.existsSync(LOGSEQ_GRAPH_PATH)) {
+      mounts.push({
+        hostPath: LOGSEQ_GRAPH_PATH,
+        containerPath: '/workspace/logseq',
+        readonly: false,
+      });
+    } else {
+      logger.warn({ path: LOGSEQ_GRAPH_PATH }, 'LOGSEQ_GRAPH_PATH does not exist, skipping mount');
+    }
   }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
@@ -201,6 +205,14 @@ function buildVolumeMounts(
  */
 function readSecrets(): Record<string, string> {
   return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
+}
+
+/** Redact secret env var values from container args for safe logging. */
+function redactArgs(args: string[]): string {
+  return args.map((a, i) =>
+    i > 0 && args[i - 1] === '-e' && /^(ALPACA_API_KEY|ALPACA_SECRET_KEY)=/.test(a)
+      ? a.replace(/=.*/, '=***') : a
+  ).join(' ');
 }
 
 function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
@@ -268,7 +280,7 @@ export async function runContainerAgent(
         (m) =>
           `${m.hostPath} -> ${m.containerPath}${m.readonly ? ' (ro)' : ''}`,
       ),
-      containerArgs: containerArgs.join(' '),
+      containerArgs: redactArgs(containerArgs),
     },
     'Container mount configuration',
   );
@@ -482,7 +494,7 @@ export async function runContainerAgent(
           JSON.stringify(input, null, 2),
           ``,
           `=== Container Args ===`,
-          containerArgs.join(' '),
+          redactArgs(containerArgs),
           ``,
           `=== Mounts ===`,
           mounts

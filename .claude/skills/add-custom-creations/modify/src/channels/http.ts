@@ -108,7 +108,7 @@ function discoverCreations(staticRoot: string): CreationManifest[] {
     if (!existsSync(manifestPath)) continue;
     try {
       const manifest: CreationManifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-      if (manifest.slug && manifest.name) {
+      if (manifest.slug && manifest.name && /^[a-zA-Z0-9-]+$/.test(manifest.slug)) {
         creations.push(manifest);
       }
     } catch {

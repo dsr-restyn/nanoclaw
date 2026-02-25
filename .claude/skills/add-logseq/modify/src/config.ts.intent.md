@@ -9,7 +9,7 @@ Added LOGSEQ_GRAPH_PATH configuration for Logseq knowledge graph integration.
 - Added key: `LOGSEQ_GRAPH_PATH` (after `NTFY_TOPIC`)
 
 ### New export (appended at end of file)
-- `LOGSEQ_GRAPH_PATH` — string, path to user's Logseq graph folder, defaults to empty string (disabled when empty)
+- `LOGSEQ_GRAPH_PATH` — string, path to user's Logseq graph folder, defaults to empty string (disabled when empty). Tilde (`~/`) is expanded to the user's home directory so container mounts resolve correctly
 
 ## Invariants
 - All existing config exports remain unchanged

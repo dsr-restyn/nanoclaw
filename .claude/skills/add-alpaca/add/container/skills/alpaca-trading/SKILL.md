@@ -79,8 +79,9 @@ curl -s "$ALPACA_BASE/v2/orders?status=all&limit=10" \
   -H "APCA-API-KEY-ID: $ALPACA_API_KEY" \
   -H "APCA-API-SECRET-KEY: $ALPACA_SECRET_KEY" | jq .
 
-# Cancel an order
-curl -s -X DELETE "$ALPACA_BASE/v2/orders/{order_id}" \
+# Cancel an order (replace $ORDER_ID with the actual order UUID)
+ORDER_ID="your-order-id-here"
+curl -s -X DELETE "$ALPACA_BASE/v2/orders/$ORDER_ID" \
   -H "APCA-API-KEY-ID: $ALPACA_API_KEY" \
   -H "APCA-API-SECRET-KEY: $ALPACA_SECRET_KEY"
 ```

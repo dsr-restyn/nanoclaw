@@ -36,7 +36,7 @@ grep -rn "search term" /workspace/logseq/pages/
 find /workspace/logseq/pages/ -name "*.md" -mtime -7
 
 # Read today's journal
-cat /workspace/logseq/journals/2026_02_24.md
+cat "/workspace/logseq/journals/$(date +%Y_%m_%d).md"
 ```
 
 ## Writing Format
@@ -104,14 +104,15 @@ Journal filenames use **underscores**, NOT hyphens: `YYYY_MM_DD.md`
 
 ```bash
 # Add to today's journal (append)
-cat >> /workspace/logseq/journals/2026_02_24.md << 'EOF'
+cat >> "/workspace/logseq/journals/$(date +%Y_%m_%d).md" << 'EOF'
 - Researched Logseq integration
   - Found the API docs at [[Logseq API]]
   - Created a prototype #done
 EOF
 
 # Create a new journal entry (only if it doesn't exist)
-cat > /workspace/logseq/journals/2026_02_24.md << 'EOF'
+[ -f "/workspace/logseq/journals/$(date +%Y_%m_%d).md" ] || \
+cat > "/workspace/logseq/journals/$(date +%Y_%m_%d).md" << 'EOF'
 - Weather today: sunny, 72F
 - Started working on the new feature
   - See [[ProjectAlpha]] for details

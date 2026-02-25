@@ -172,11 +172,15 @@ function buildVolumeMounts(
 
   // Logseq knowledge graph (read-write for all groups)
   if (LOGSEQ_GRAPH_PATH) {
-    mounts.push({
-      hostPath: LOGSEQ_GRAPH_PATH,
-      containerPath: '/workspace/logseq',
-      readonly: false,
-    });
+    if (fs.existsSync(LOGSEQ_GRAPH_PATH)) {
+      mounts.push({
+        hostPath: LOGSEQ_GRAPH_PATH,
+        containerPath: '/workspace/logseq',
+        readonly: false,
+      });
+    } else {
+      logger.warn({ path: LOGSEQ_GRAPH_PATH }, 'LOGSEQ_GRAPH_PATH does not exist, skipping mount');
+    }
   }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)

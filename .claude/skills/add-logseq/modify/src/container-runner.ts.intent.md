@@ -11,7 +11,8 @@ Added Logseq knowledge graph as a conditional volume mount so agents can read/wr
 ### buildVolumeMounts function
 - Added conditional volume mount block before the `additionalMounts` section
 - Mounts `LOGSEQ_GRAPH_PATH` to `/workspace/logseq` (read-write)
-- Only added when `LOGSEQ_GRAPH_PATH` is non-empty
+- Only added when `LOGSEQ_GRAPH_PATH` is non-empty AND the path exists on disk
+- Logs a warning if `LOGSEQ_GRAPH_PATH` is set but the directory doesn't exist
 
 ## Invariants
 - All existing volume mounts remain unchanged

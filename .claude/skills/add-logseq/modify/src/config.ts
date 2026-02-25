@@ -97,6 +97,9 @@ export const VOICE_PORT = parseInt(
 export const NTFY_TOPIC =
   process.env.NTFY_TOPIC || envConfig.NTFY_TOPIC || '';
 
-// Logseq knowledge graph
-export const LOGSEQ_GRAPH_PATH =
+// Logseq knowledge graph (tilde expanded for container mounts)
+const _rawLogseqPath =
   process.env.LOGSEQ_GRAPH_PATH || envConfig.LOGSEQ_GRAPH_PATH || '';
+export const LOGSEQ_GRAPH_PATH = _rawLogseqPath.startsWith('~/')
+  ? path.join(HOME_DIR, _rawLogseqPath.slice(2))
+  : _rawLogseqPath;
