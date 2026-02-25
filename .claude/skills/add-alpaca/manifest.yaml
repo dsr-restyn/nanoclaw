@@ -1,0 +1,18 @@
+skill: alpaca
+version: 1.0.0
+description: "Alpaca trading API — agents can check positions, place orders, get market data"
+core_version: 0.1.0
+adds:
+  - container/skills/alpaca-trading/SKILL.md
+modifies:
+  - src/config.ts
+  - src/container-runner.ts
+structured:
+  npm_dependencies: {}
+  env_additions:
+    - ALPACA_API_KEY
+    - ALPACA_SECRET_KEY
+    - ALPACA_PAPER
+conflicts: []
+depends: []
+test: "npm run build"

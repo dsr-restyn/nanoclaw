@@ -72,7 +72,7 @@ know when to use notifications vs regular messages.
 Tell the user:
 
 > ntfy.sh notifications enabled. All agents can now send push notifications
-> using `curl -d "message" ntfy.sh/$NTFY_TOPIC`.
+> using `curl -d "message" "https://ntfy.sh/$NTFY_TOPIC"`.
 >
 > Test it: ask Andy to "send me a test push notification".
 >
