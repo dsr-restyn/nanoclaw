@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'crypto';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
@@ -5,7 +6,7 @@ import path from 'path';
 import { ASSISTANT_NAME, DATA_DIR, STORE_DIR } from './config.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
-import { NewMessage, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
+import { NewMessage, RegisteredGroup, RuntimeUpdate, ScheduledTask, TaskRunLog } from './types.js';
 
 let db: Database.Database;
 
@@ -77,6 +78,33 @@ function createSchema(database: Database.Database): void {
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS http_device_tokens (
+      token_hash TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS voice_sessions (
+      device_id       TEXT PRIMARY KEY,
+      token_hash      TEXT NOT NULL,
+      group_jid       TEXT NOT NULL,
+      last_ip         TEXT,
+      connected_at    TEXT,
+      disconnected_at TEXT,
+      drop_count      INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS runtime_updates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_folder TEXT NOT NULL,
+      action TEXT NOT NULL,
+      params TEXT NOT NULL DEFAULT '{}',
+      reason TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      result TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      resolved_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_runtime_updates_status ON runtime_updates(status);
+    CREATE INDEX IF NOT EXISTS idx_runtime_updates_group ON runtime_updates(group_folder);
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -660,4 +688,180 @@ function migrateJsonState(): void {
       }
     }
   }
+}
+
+// --- HTTP device token management ---
+
+export function createHttpToken(label: string): string {
+  const raw = randomBytes(32).toString('base64url');
+  const hash = createHash('sha256').update(raw).digest('hex');
+  db.prepare(
+    'INSERT INTO http_device_tokens (token_hash, label, created_at) VALUES (?, ?, ?)',
+  ).run(hash, label, new Date().toISOString());
+  return raw;
+}
+
+export function validateHttpToken(raw: string): boolean {
+  const hash = createHash('sha256').update(raw).digest('hex');
+  const row = db
+    .prepare('SELECT 1 FROM http_device_tokens WHERE token_hash = ?')
+    .get(hash);
+  return !!row;
+}
+
+export function revokeHttpToken(raw: string): void {
+  const hash = createHash('sha256').update(raw).digest('hex');
+  db.prepare('DELETE FROM http_device_tokens WHERE token_hash = ?').run(hash);
+}
+
+export function listHttpTokens(): Array<{ label: string; created_at: string }> {
+  return db
+    .prepare('SELECT label, created_at FROM http_device_tokens ORDER BY created_at')
+    .all() as Array<{ label: string; created_at: string }>;
+}
+
+export function getHttpGroupMessages(
+  jid: string,
+  since: string,
+  limit: number,
+): Array<{ id: string; sender: string; sender_name: string; content: string; timestamp: string; is_from_me: boolean; is_bot_message: boolean }> {
+  const sql = `
+    SELECT id, sender, sender_name, content, timestamp, is_from_me, is_bot_message
+    FROM messages
+    WHERE chat_jid = ? AND (? = '' OR timestamp > ?)
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `;
+  const rows = db.prepare(sql).all(jid, since, since, limit) as Array<{
+    id: string;
+    sender: string;
+    sender_name: string;
+    content: string;
+    timestamp: string;
+    is_from_me: number;
+    is_bot_message: number;
+  }>;
+  return rows.reverse().map((r) => ({
+    ...r,
+    is_from_me: r.is_from_me === 1,
+    is_bot_message: r.is_bot_message === 1,
+  }));
+}
+
+// --- Voice session persistence ---
+
+export interface VoiceSession {
+  device_id: string;
+  token_hash: string;
+  group_jid: string;
+  last_ip: string | null;
+  connected_at: string | null;
+  disconnected_at: string | null;
+  drop_count: number;
+}
+
+export function upsertVoiceSession(
+  deviceId: string,
+  tokenHash: string,
+  groupJid: string,
+  ip: string,
+): void {
+  db.prepare(`
+    INSERT INTO voice_sessions (device_id, token_hash, group_jid, last_ip, connected_at, disconnected_at, drop_count)
+    VALUES (?, ?, ?, ?, ?, NULL, 0)
+    ON CONFLICT(device_id) DO UPDATE SET
+      token_hash = excluded.token_hash,
+      group_jid = excluded.group_jid,
+      last_ip = excluded.last_ip,
+      connected_at = excluded.connected_at,
+      disconnected_at = NULL
+  `).run(deviceId, tokenHash, groupJid, ip, new Date().toISOString());
+}
+
+export function disconnectVoiceSession(deviceId: string): void {
+  db.prepare(`
+    UPDATE voice_sessions
+    SET disconnected_at = ?
+    WHERE device_id = ?
+  `).run(new Date().toISOString(), deviceId);
+}
+
+export function findRecentVoiceSession(
+  ip: string,
+  graceMs: number,
+): VoiceSession | undefined {
+  const cutoff = new Date(Date.now() - graceMs).toISOString();
+  return db.prepare(`
+    SELECT * FROM voice_sessions
+    WHERE last_ip = ? AND disconnected_at IS NOT NULL AND disconnected_at > ?
+    ORDER BY disconnected_at DESC
+    LIMIT 1
+  `).get(ip, cutoff) as VoiceSession | undefined;
+}
+
+export function incrementVoiceDropCount(deviceId: string): void {
+  db.prepare(`
+    UPDATE voice_sessions
+    SET drop_count = drop_count + 1, connected_at = ?, disconnected_at = NULL
+    WHERE device_id = ?
+  `).run(new Date().toISOString(), deviceId);
+}
+
+export function getVoiceStatus(): VoiceSession | undefined {
+  return db.prepare(`
+    SELECT * FROM voice_sessions
+    ORDER BY COALESCE(connected_at, disconnected_at) DESC
+    LIMIT 1
+  `).get() as VoiceSession | undefined;
+}
+
+// --- Runtime update management ---
+
+export function createRuntimeUpdate(update: {
+  group_folder: string;
+  action: string;
+  params: string;
+  reason: string;
+}): number | null {
+  const existing = getPendingRuntimeUpdate(update.group_folder);
+  if (existing) return null;
+
+  const result = db.prepare(
+    `INSERT INTO runtime_updates (group_folder, action, params, reason, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(
+    update.group_folder,
+    update.action,
+    update.params,
+    update.reason,
+    new Date().toISOString(),
+  );
+  return result.lastInsertRowid as number;
+}
+
+export function getRuntimeUpdate(id: number): RuntimeUpdate | null {
+  return (db.prepare('SELECT * FROM runtime_updates WHERE id = ?').get(id) as RuntimeUpdate) ?? null;
+}
+
+export function getPendingRuntimeUpdate(groupFolder: string): RuntimeUpdate | null {
+  return (db.prepare(
+    `SELECT * FROM runtime_updates WHERE group_folder = ? AND status = 'pending' LIMIT 1`,
+  ).get(groupFolder) as RuntimeUpdate) ?? null;
+}
+
+export function resolveRuntimeUpdate(
+  id: number,
+  status: 'approved' | 'denied' | 'expired' | 'failed',
+  result?: string,
+): void {
+  db.prepare(
+    `UPDATE runtime_updates SET status = ?, result = ?, resolved_at = ? WHERE id = ?`,
+  ).run(status, result ?? null, new Date().toISOString(), id);
+}
+
+export function getExpiredRuntimeUpdates(maxAgeMs: number): RuntimeUpdate[] {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  return db.prepare(
+    `SELECT * FROM runtime_updates WHERE status = 'pending' AND created_at <= ?`,
+  ).all(cutoff) as RuntimeUpdate[];
 }

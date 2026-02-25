@@ -10,7 +10,7 @@ import {
   TIMEZONE,
 } from './config.js';
 import { AvailableGroup } from './container-runner.js';
-import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
+import { createRuntimeUpdate, createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
@@ -170,6 +170,10 @@ export async function processTaskIpc(
     trigger?: string;
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
+    // For runtime_update
+    action?: string;
+    params?: string;
+    reason?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -380,6 +384,89 @@ export async function processTaskIpc(
         );
       }
       break;
+
+    case 'runtime_update': {
+      const VALID_ACTIONS = ['git_pull', 'apply_skill', 'update_config', 'rebuild_container'];
+      if (!data.action || !VALID_ACTIONS.includes(data.action)) {
+        logger.warn({ action: data.action, sourceGroup }, 'Invalid runtime_update action');
+        break;
+      }
+
+      const params = data.params || '{}';
+      const reason = data.reason || '';
+
+      // Validate apply_skill path
+      if (data.action === 'apply_skill') {
+        try {
+          const parsed = JSON.parse(params);
+          if (!parsed.skill || parsed.skill.includes('..') || !parsed.skill.startsWith('.claude/skills/')) {
+            logger.warn({ skill: parsed?.skill, sourceGroup }, 'Invalid skill path in runtime_update');
+            break;
+          }
+        } catch {
+          logger.warn({ sourceGroup }, 'Invalid params JSON in runtime_update');
+          break;
+        }
+      }
+
+      // Validate update_config params
+      if (data.action === 'update_config') {
+        try {
+          const parsed = JSON.parse(params);
+          if (!parsed.key || typeof parsed.key !== 'string' || !parsed.value) {
+            logger.warn({ sourceGroup }, 'Invalid update_config params');
+            break;
+          }
+          if (!/^[A-Z][A-Z0-9_]*$/.test(parsed.key)) {
+            logger.warn({ key: parsed.key, sourceGroup }, 'Invalid env key format');
+            break;
+          }
+        } catch {
+          logger.warn({ sourceGroup }, 'Invalid params JSON in runtime_update');
+          break;
+        }
+      }
+
+      // Find the chat JID for this group to send the approval message
+      const allGroups = deps.registeredGroups();
+      const chatJid = Object.entries(allGroups).find(
+        ([, g]) => g.folder === sourceGroup,
+      )?.[0];
+
+      if (!chatJid) {
+        logger.warn({ sourceGroup }, 'Cannot find chat JID for runtime_update source group');
+        break;
+      }
+
+      const id = createRuntimeUpdate({
+        group_folder: sourceGroup,
+        action: data.action,
+        params,
+        reason,
+      });
+
+      if (id === null) {
+        logger.warn({ sourceGroup }, 'Runtime update blocked — group already has pending request');
+        break;
+      }
+
+      let description = `\`${data.action}\``;
+      if (data.action === 'apply_skill') {
+        const parsed = JSON.parse(params);
+        description += ` — ${parsed.skill}`;
+      } else if (data.action === 'update_config') {
+        const parsed = JSON.parse(params);
+        description += ` — ${parsed.key}=${parsed.value}`;
+      }
+
+      await deps.sendMessage(
+        chatJid,
+        `Runtime update request from **${sourceGroup}**: ${description}${reason ? ` — ${reason}` : ''}\n\nReply \`approve ${id}\` or \`deny ${id}\``,
+      );
+
+      logger.info({ id, sourceGroup, action: data.action }, 'Runtime update queued for approval');
+      break;
+    }
 
     default:
       logger.warn({ type: data.type }, 'Unknown IPC task type');

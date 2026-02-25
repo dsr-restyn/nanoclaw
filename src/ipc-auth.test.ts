@@ -4,6 +4,7 @@ import {
   _initTestDatabase,
   createTask,
   getAllTasks,
+  getPendingRuntimeUpdate,
   getRegisteredGroup,
   getTaskById,
   setRegisteredGroup,
@@ -607,5 +608,112 @@ describe('register_group success', () => {
     );
 
     expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+  });
+});
+
+// --- runtime_update validation and queuing ---
+
+describe('runtime_update IPC', () => {
+  it('queues a valid git_pull request', async () => {
+    const sentMessages: { jid: string; text: string }[] = [];
+    deps.sendMessage = async (jid, text) => { sentMessages.push({ jid, text }); };
+
+    await processTaskIpc(
+      {
+        type: 'runtime_update',
+        action: 'git_pull',
+        reason: 'upstream fixes available',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const pending = getPendingRuntimeUpdate('other-group');
+    expect(pending).not.toBeNull();
+    expect(pending!.action).toBe('git_pull');
+    expect(sentMessages.length).toBe(1);
+    expect(sentMessages[0].text).toContain('approve');
+    expect(sentMessages[0].text).toContain('deny');
+  });
+
+  it('rejects unknown action', async () => {
+    await processTaskIpc(
+      {
+        type: 'runtime_update',
+        action: 'rm_rf' as any,
+        reason: 'bad',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    expect(getPendingRuntimeUpdate('other-group')).toBeNull();
+  });
+
+  it('rejects apply_skill with path traversal', async () => {
+    await processTaskIpc(
+      {
+        type: 'runtime_update',
+        action: 'apply_skill',
+        params: JSON.stringify({ skill: '../../etc/passwd' }),
+        reason: 'hack',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    expect(getPendingRuntimeUpdate('other-group')).toBeNull();
+  });
+
+  it('queues valid update_config request', async () => {
+    const sentMessages: { jid: string; text: string }[] = [];
+    deps.sendMessage = async (jid, text) => { sentMessages.push({ jid, text }); };
+
+    await processTaskIpc(
+      {
+        type: 'runtime_update',
+        action: 'update_config',
+        params: JSON.stringify({ key: 'NEW_KEY', value: 'val' }),
+        reason: 'add integration',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const pending = getPendingRuntimeUpdate('other-group');
+    expect(pending).not.toBeNull();
+  });
+
+  it('blocks duplicate pending request from same group', async () => {
+    deps.sendMessage = async () => {};
+
+    await processTaskIpc(
+      {
+        type: 'runtime_update',
+        action: 'git_pull',
+        reason: 'first',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    await processTaskIpc(
+      {
+        type: 'runtime_update',
+        action: 'rebuild_container',
+        reason: 'second',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const pending = getPendingRuntimeUpdate('other-group');
+    expect(pending!.action).toBe('git_pull');
   });
 });
