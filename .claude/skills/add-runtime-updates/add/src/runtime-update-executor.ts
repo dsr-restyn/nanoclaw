@@ -114,6 +114,7 @@ function executeAction(update: RuntimeUpdate): string {
     }
 
     case 'rebuild_container': {
+      // build.sh is trusted host-side code — not user/agent controlled
       execFileSync('bash', ['./container/build.sh'], { cwd, timeout: 300000 });
       return 'Container image rebuilt.';
     }

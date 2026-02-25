@@ -413,12 +413,16 @@ export async function processTaskIpc(
       if (data.action === 'update_config') {
         try {
           const parsed = JSON.parse(params);
-          if (!parsed.key || typeof parsed.key !== 'string' || !parsed.value) {
+          if (!parsed.key || typeof parsed.key !== 'string' || typeof parsed.value !== 'string') {
             logger.warn({ sourceGroup }, 'Invalid update_config params');
             break;
           }
           if (!/^[A-Z][A-Z0-9_]*$/.test(parsed.key)) {
             logger.warn({ key: parsed.key, sourceGroup }, 'Invalid env key format');
+            break;
+          }
+          if (parsed.value.includes('\n') || parsed.value.includes('\r')) {
+            logger.warn({ sourceGroup }, 'Config value contains newlines');
             break;
           }
         } catch {
