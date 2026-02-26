@@ -20,7 +20,7 @@ export function matchApprovalCommand(
   };
 }
 
-const REQUIRES_RESTART = new Set(['git_pull', 'apply_skill', 'rebuild_container']);
+const REQUIRES_RESTART = new Set(['git_pull', 'apply_skill', 'rebuild_container', 'update_config']);
 
 export async function processApproval(
   id: number,
