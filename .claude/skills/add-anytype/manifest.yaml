@@ -1,0 +1,16 @@
+skill: anytype
+version: 1.0.0
+description: "Anytype knowledge management — agents can search, create, and organize objects via MCP"
+core_version: 0.1.0
+adds:
+  - container/skills/anytype/SKILL.md
+modifies:
+  - src/config.ts
+  - src/container-runner.ts
+structured:
+  npm_dependencies: {}
+  env_additions:
+    - ANYTYPE_API_KEY
+conflicts: []
+depends: []
+test: "npm run build"
