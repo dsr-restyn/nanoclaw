@@ -15,7 +15,7 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
-import { readAllEnvVars, readEnvFile } from './env.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import { CONTAINER_RUNTIME_BIN, readonlyMountArgs, stopContainer } from './container-runtime.js';
@@ -42,9 +42,6 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
-  eventType?: 'text' | 'tool' | 'result';
-  tool?: string;
-  toolSummary?: string;
 }
 
 interface VolumeMount {
@@ -142,17 +139,6 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Gmail credentials directory (MCP may need to refresh tokens)
-  const homeDir = process.env.HOME || '/root';
-  const gmailDir = path.join(homeDir, '.gmail-mcp');
-  if (fs.existsSync(gmailDir)) {
-    mounts.push({
-      hostPath: gmailDir,
-      containerPath: '/home/node/.gmail-mcp',
-      readonly: false,
-    });
-  }
-
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);
@@ -206,15 +192,16 @@ function buildContainerArgs(mounts: VolumeMount[], containerName: string): strin
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
-  // Forward all non-secret .env vars so container agents can use them.
-  // Secrets (API keys, tokens used for auth) go via stdin instead.
-  const SECRET_KEYS = new Set(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
-  const alreadySet = new Set(['TZ']);
-  for (const [key, value] of Object.entries(readAllEnvVars())) {
-    if (!SECRET_KEYS.has(key) && !alreadySet.has(key)) {
+  // Forward env vars registered by update_config runtime updates.
+  // Only explicitly opted-in keys are forwarded — no blanket passthrough.
+  const passthroughPath = path.join(DATA_DIR, 'container-env-passthrough.json');
+  try {
+    const keys: string[] = JSON.parse(fs.readFileSync(passthroughPath, 'utf-8'));
+    const values = readEnvFile(keys);
+    for (const [key, value] of Object.entries(values)) {
       args.push('-e', `${key}=${value}`);
     }
-  }
+  } catch { /* no passthrough file yet */ }
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),

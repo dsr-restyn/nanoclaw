@@ -110,6 +110,16 @@ function executeAction(update: RuntimeUpdate): string {
       }
 
       fs.appendFileSync(envPath, `\n${key}=${value}\n`);
+
+      // Register the key for container env passthrough so agents can use it
+      const passthroughPath = path.join(DATA_DIR, 'container-env-passthrough.json');
+      let passthrough: string[] = [];
+      try { passthrough = JSON.parse(fs.readFileSync(passthroughPath, 'utf-8')); } catch { /* no file yet */ }
+      if (!passthrough.includes(key)) {
+        passthrough.push(key);
+        fs.writeFileSync(passthroughPath, JSON.stringify(passthrough, null, 2) + '\n');
+      }
+
       return `Added ${key} to .env.`;
     }
 

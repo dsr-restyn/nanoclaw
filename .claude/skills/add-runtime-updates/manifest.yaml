@@ -12,7 +12,6 @@ modifies:
   - src/ipc.ts
   - src/index.ts
   - src/ipc-auth.test.ts
-  - src/env.ts
   - src/container-runner.ts
 structured:
   npm_dependencies: {}

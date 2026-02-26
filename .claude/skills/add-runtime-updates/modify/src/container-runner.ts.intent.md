@@ -1,35 +1,32 @@
 # Intent: src/container-runner.ts modifications
 
 ## What changed
-Added generic .env passthrough so container agents receive all non-secret environment variables. This ensures keys added via `update_config` runtime updates reach containers after restart.
-
-### Import block
-- Added `readAllEnvVars` to the import from `./env.js`
-- Removed `NTFY_TOPIC` from the config import (now covered by generic passthrough)
+Added targeted env var passthrough for keys registered by `update_config` runtime updates. Only explicitly opted-in keys are forwarded — no blanket passthrough that could leak secrets.
 
 ### buildContainerArgs function
-- Removed the explicit `NTFY_TOPIC` conditional block (redundant with generic passthrough)
-- Added generic env var forwarding after the TZ env var:
+- Added passthrough block after TZ env var, before the user/gid logic:
   ```typescript
-  const SECRET_KEYS = new Set(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
-  const alreadySet = new Set(['TZ']);
-  for (const [key, value] of Object.entries(readAllEnvVars())) {
-    if (!SECRET_KEYS.has(key) && !alreadySet.has(key)) {
+  const passthroughPath = path.join(DATA_DIR, 'container-env-passthrough.json');
+  try {
+    const keys: string[] = JSON.parse(fs.readFileSync(passthroughPath, 'utf-8'));
+    const values = readEnvFile(keys);
+    for (const [key, value] of Object.entries(values)) {
       args.push('-e', `${key}=${value}`);
     }
-  }
+  } catch { /* no passthrough file yet */ }
   ```
-- SECRET_KEYS matches the keys in readSecrets() — these go via stdin, never as env vars
-- alreadySet prevents double-setting TZ (already set explicitly from config)
+- Reads `data/container-env-passthrough.json` (written by update_config in runtime-update-executor.ts)
+- Uses existing `readEnvFile()` to fetch only the registered keys from `.env`
+- Silently no-ops if the passthrough file doesn't exist yet
 
 ## Invariants
-- All existing volume mounts unchanged
-- readSecrets() unchanged — secrets still go via stdin
-- The user/gid logic unchanged
-- All other functions (runContainerAgent, buildVolumeMounts, writeTasksSnapshot, writeGroupsSnapshot) unchanged
+- All existing env var passes unchanged (TZ, NTFY_TOPIC if present, HOME)
+- readSecrets() unchanged — secrets still go via stdin only
+- All volume mount logic unchanged
+- All other functions unchanged
 
 ## Must-keep
-- The TZ env var pass (before the generic passthrough)
-- The secrets mechanism (readSecrets/stdin) — secrets do NOT go through env passthrough
+- The secrets mechanism (readSecrets/stdin) — secrets NEVER go as -e env vars
+- The TZ env var pass
+- Existing skill-added env var conditionals (NTFY_TOPIC, ALPACA_*, etc.)
 - The full buildContainerArgs function structure
-- All existing volume mount logic
