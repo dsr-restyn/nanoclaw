@@ -1,0 +1,17 @@
+skill: pipeline
+version: 1.0.0
+description: "Host-level pipeline orchestration — DOT parser foundation types, tokens, and utilities"
+core_version: 0.1.0
+adds:
+  - src/pipeline/tokens.ts
+  - src/pipeline/types.ts
+  - src/pipeline/duration.ts
+  - src/pipeline/label.ts
+  - src/pipeline/duration.test.ts
+modifies: []
+structured:
+  npm_dependencies: {}
+  env_additions: []
+conflicts: []
+depends: []
+test: "npx vitest run src/pipeline/duration.test.ts"
