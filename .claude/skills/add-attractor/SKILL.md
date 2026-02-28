@@ -1,12 +1,11 @@
 ---
 name: add-attractor
-description: Add Attractor pipeline workflow skill. Agents can run multi-step DAG-based workflows using DOT syntax for features, bug fixes, refactoring, and code review.
+description: Add Attractor pipeline workflow skill. Host-level orchestration of multi-step DAG-based workflows using DOT syntax. Agents compose workflow graphs and submit via IPC — no Bun or Attractor clone needed.
 ---
 
 # Add Attractor Pipeline Workflows
 
-Gives agents DAG-based pipeline workflows for multi-step tasks.
-No host-side changes — adds agent-facing docs and workflow templates only.
+Gives agents DAG-based pipeline workflows for multi-step tasks. The host orchestrates pipeline execution — agents just compose DOT graphs and submit them via IPC.
 
 ## Phase 1: Pre-flight
 
@@ -31,10 +30,12 @@ npx tsx scripts/apply-skill.ts .claude/skills/add-attractor
 ```
 
 This adds:
-- `container/skills/attractor/CLAUDE.md` (agent-facing docs)
-- `container/skills/attractor/workflows/*.dot` (4 pre-built workflow templates)
+- `container/skills/attractor/CLAUDE.md` — DOT syntax reference and IPC request format for agents
+- `container/skills/attractor/workflows/*.dot` — 4 pre-built workflow templates
+- `src/pipeline/` — Host-level pipeline orchestration engine (parser, runner, orchestrator, conditions, edge selection, checkpoints, events)
 
-No source files are modified. No merge conflicts possible.
+And modifies:
+- `src/ipc.ts` — Adds `start_pipeline` and `human_gate_response` IPC task handlers
 
 ### Validate
 
@@ -46,9 +47,9 @@ Build must be clean before proceeding.
 
 ## Phase 3: Configure
 
-No configuration needed. The skill is purely agent-facing — workflow templates and documentation are available inside containers automatically.
+No configuration needed. The pipeline engine runs on the host and processes `start_pipeline` IPC requests from agents.
 
-Optionally rebuild the container to pick up the new skill files:
+Rebuild the container to pick up the new agent-facing skill files:
 
 ```bash
 ./container/build.sh
@@ -58,9 +59,10 @@ Optionally rebuild the container to pick up the new skill files:
 
 Tell the user:
 
-> Attractor pipeline workflows enabled. Agents can now use DOT-based
-> workflow graphs for multi-step tasks like feature development, bug
-> fixes, refactoring, and code review.
+> Attractor pipeline workflows enabled. The host now orchestrates
+> multi-step DOT-based workflows. Agents compose pipeline graphs and
+> submit them via IPC (`start_pipeline`). No Bun or Attractor clone
+> needed inside containers.
 >
-> Workflow templates are at `/home/node/.claude/skills/attractor/workflows/`
-> inside the container. Agents install Bun and clone Attractor on first use.
+> Pipeline source files are at `src/pipeline/`. Agent-facing DOT syntax
+> reference is at `container/skills/attractor/CLAUDE.md`.

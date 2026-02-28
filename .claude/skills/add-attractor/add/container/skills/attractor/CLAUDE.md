@@ -1,149 +1,143 @@
-# Attractor - Pipeline Workflows
+# Attractor Pipeline Workflows
 
-Build autonomous multi-step software tasks using DAG-based pipeline workflows.
+## What This Does
 
-Based on StrongDM's [Attractor](https://github.com/brynary/attractor) — a TypeScript framework for non-interactive coding agents that execute through visual workflow graphs.
+You can run multi-step workflows using DOT-based pipelines. The host orchestrates execution — you just compose the workflow graph and submit it. Each node in the graph becomes a prompt sent to you by the host.
 
-## Setup (First Use)
+## Requesting a Pipeline
 
-Attractor requires the Bun runtime. Install once per session:
-
-```bash
-curl -fsSL https://bun.sh/install | bash
-source ~/.bashrc
-
-# Clone and install attractor
-git clone https://github.com/brynary/attractor.git /tmp/attractor
-cd /tmp/attractor && bun install
-```
-
-## Progress Reporting
-
-**Always send a status update via `mcp__nanoclaw__send_message` when entering each workflow node.** This lets the user follow along in real time.
-
-Format: `[Pipeline] {workflow_name}: {node_label} ({node_number}/{total_nodes})`
-
-Examples:
-- `[Pipeline] FeatureImplementation: Analyze Codebase (1/5)`
-- `[Pipeline] FeatureImplementation: Write Code (3/5)`
-- `[Pipeline] BugFix: Run Tests — PASS (4/5)`
-- `[Pipeline] BugFix: Fix Failures — retry 2/3 (4/5)`
-
-Also send a final summary when the workflow completes or fails:
-- `[Pipeline] FeatureImplementation: Complete — all tests passing`
-- `[Pipeline] BugFix: Failed — max retries exceeded at Run Tests`
-
-## Running a Workflow
+Write a JSON file to your IPC tasks directory:
 
 ```bash
-# Run a pre-built workflow template
-cd /tmp/attractor
-bun run attractor/bin/attractor-server.ts  # HTTP server mode
-
-# Or use the pipeline runner programmatically
-bun run -e "
-import { parse } from './attractor/src/parser';
-import { PipelineRunner } from './attractor/src/runner';
-
-const dot = Bun.file('/path/to/workflow.dot').text();
-const graph = parse(await dot);
-const runner = new PipelineRunner(graph);
-await runner.run();
-"
+cat > /workspace/ipc/tasks/pipeline_$(date +%s).json << 'EOF'
+{
+  "type": "start_pipeline",
+  "dot": "digraph Feature {\n  graph [goal=\"Add RSI indicator\"]\n  start [shape=Mdiamond]\n  analyze [label=\"Analyze Codebase\", prompt=\"Review the codebase and identify where to add the RSI indicator\"]\n  implement [label=\"Implement\", prompt=\"Write the RSI indicator code\"]\n  test [label=\"Run Tests\", prompt=\"Run tests and verify the implementation\"]\n  exit [shape=Msquare]\n  start -> analyze -> implement -> test -> exit\n  test -> implement [condition=\"outcome=fail\"]\n}",
+  "verbosity": "standard"
+}
+EOF
 ```
 
-## Workflow Format (DOT Syntax)
+## DOT Syntax Reference
 
-Workflows are GraphViz DOT digraphs. Each node is a task, each edge is a dependency.
+### Node Shapes
 
+| Shape | Type | Behavior |
+|-------|------|----------|
+| `Mdiamond` | Start | Pipeline begins here. No-op. |
+| `Msquare` | Exit | Pipeline ends. Checks goal gates. |
+| `box` (default) | Codergen | You receive a prompt and do work. |
+| `diamond` | Conditional | Host evaluates edges, routes automatically. |
+| `hexagon` | Wait Human | Pauses for user approval. |
+| `parallelogram` | Tool | Runs a tool command. |
+
+### Node Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `label` | Display name for the node |
+| `prompt` | The prompt text sent to you |
+| `shape` | Node type (see above) |
+| `max_retries` | Max retry attempts on failure (default: 0) |
+| `goal_gate` | If `true`, must succeed before pipeline exits |
+| `retry_target` | Node to jump to on failure |
+| `isolated` | If `true`, forces fresh container session |
+| `fidelity` | Context mode: `full`, `compact`, `truncate`, `summary:low/medium/high` |
+
+### Edge Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `condition` | Boolean expression (e.g., `outcome=success`) |
+| `label` | Display label for routing |
+| `weight` | Priority for tiebreaking (higher = preferred) |
+
+### Condition Syntax
+
+```
+outcome=success              # Match outcome
+outcome!=fail                # Negation
+outcome=success && ready=true  # AND clauses
+context.my_key=value         # Context lookup
+```
+
+### Variable Expansion
+
+Use `$goal` in prompts to reference the pipeline's goal:
+```
+prompt="Implement $goal using best practices"
+```
+
+## Outcome Reporting
+
+When the host sends you a pipeline task prompt, **end your response** with:
+
+```
+[outcome:success]    # Task succeeded
+[outcome:fail]       # Task failed
+```
+
+Optionally recommend the next step:
+```
+[preferred_label:Approve]
+```
+
+## Workflow Patterns
+
+### Linear with Test Loop
 ```dot
-digraph Example {
-  graph [goal="What this pipeline achieves"]
-
+digraph Feature {
+  graph [goal="Add feature X"]
   start [shape=Mdiamond]
-  analyze [label="Analyze Code", prompt="Review the codebase and identify..."]
-  implement [label="Write Code", prompt="Implement the feature..."]
-  test [shape=parallelogram, tool_command="npm test"]
-  fix [label="Fix Failures", prompt="Analyze and fix test failures..."]
+  analyze [label="Analyze", prompt="Review the codebase"]
+  implement [label="Implement", prompt="Write the code"]
+  test [label="Test", prompt="Run tests", max_retries=3]
   exit [shape=Msquare]
-
-  start -> analyze -> implement -> test
-  test -> exit [label="Pass", condition="outcome=success"]
-  test -> fix [label="Fail", condition="outcome!=success"]
-  fix -> test
+  start -> analyze -> implement -> test -> exit
+  test -> implement [condition="outcome=fail"]
 }
 ```
 
-## Node Types
-
-| Shape | Purpose | Key Attribute |
-|-------|---------|---------------|
-| `Mdiamond` | Start node | — |
-| `Msquare` | Exit node | — |
-| `box` (default) | LLM task | `prompt="..."` |
-| `parallelogram` | Shell command | `tool_command="..."` |
-| `hexagon` | Human approval gate | `label="Approve"` |
-| `diamond` | Conditional routing | — |
-| `component` | Parallel fan-out | — |
-
-## Edge Attributes
-
-- `label` — Display name and routing key
-- `condition` — Boolean expression (e.g., `outcome=success`)
-- `weight` — Numeric priority for edge selection
-
-## Pre-built Workflows
-
-Templates in the `workflows/` directory (relative to this skill):
-
-- *feature-add.dot* — New feature with design → approve → implement → test loop
-- *bug-fix.dot* — Investigate → fix → regression test loop
-- *refactor.dot* — Baseline tests → refactor → verify loop
-- *code-review.dot* — Analyze → fix → verify → human review
-
-Copy and customize these for your task. The workflow files are at:
-`/home/node/.claude/skills/attractor/workflows/`
-
-## Key Patterns
-
-### Test-driven loop (most common)
+### Human Approval Gate
 ```dot
-implement -> test
-test -> exit [condition="outcome=success"]
-test -> fix [condition="outcome!=success"]
-fix -> test
+digraph Deploy {
+  graph [goal="Deploy to production"]
+  start [shape=Mdiamond]
+  prepare [label="Prepare", prompt="Prepare deployment"]
+  approve [label="Approve Deploy", shape=hexagon]
+  deploy [label="Deploy", prompt="Deploy to production"]
+  exit [shape=Msquare]
+  start -> prepare -> approve
+  approve -> deploy [label="[A] Approve"]
+  approve -> exit [label="[R] Reject"]
+  deploy -> exit
+}
 ```
 
-### Human approval gate
+### Conditional Routing
 ```dot
-review [shape=hexagon, label="Review Changes"]
-review -> next [label="[A] Approve"]
-review -> redo [label="[R] Revise"]
+digraph BugFix {
+  graph [goal="Fix bug #123"]
+  start [shape=Mdiamond]
+  analyze [label="Analyze Bug", prompt="Find the root cause"]
+  check [shape=diamond]
+  simple_fix [label="Simple Fix", prompt="Apply the fix"]
+  complex_fix [label="Complex Fix", prompt="Refactor and fix"]
+  test [label="Test", prompt="Run tests"]
+  exit [shape=Msquare]
+  start -> analyze -> check
+  check -> simple_fix [condition="context.severity=low"]
+  check -> complex_fix [condition="context.severity=high"]
+  simple_fix -> test
+  complex_fix -> test
+  test -> exit [condition="outcome=success"]
+  test -> analyze [condition="outcome=fail"]
+}
 ```
 
-### Parallel fan-out
-```dot
-fanout [shape=component]
-fanout -> task_a -> fanin
-fanout -> task_b -> fanin
-fanin [shape=tripleoctagon]
-```
+## Verbosity
 
-### Retry with limit
-```dot
-graph [default_max_retry=3]
-test [goal_gate=true]
-```
-
-## When to Use
-
-- Multi-step tasks with clear phases (analyze → design → implement → test)
-- Tasks that need retry loops (implement until tests pass)
-- Work that benefits from human checkpoints
-- Parallel independent subtasks
-
-## When NOT to Use
-
-- Simple one-shot tasks (just do them directly)
-- Tasks with unclear requirements (brainstorm first, then maybe use a workflow)
-- Quick fixes or config changes
+Set `"verbosity"` in the IPC request:
+- `"minimal"` -- Only pipeline start/end and errors
+- `"standard"` -- Stage progress, routing, retries (default)
+- `"verbose"` -- Everything including context updates

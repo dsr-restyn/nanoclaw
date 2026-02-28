@@ -37,6 +37,7 @@ adds:
   - src/pipeline/runner.test.ts
 modifies:
   - src/ipc.ts
+  - src/index.ts
 structured:
   npm_dependencies: {}
   env_additions: []
