@@ -27,6 +27,8 @@ adds:
   - src/pipeline/events.test.ts
   - src/pipeline/conditions.ts
   - src/pipeline/conditions.test.ts
+  - src/pipeline/edge-selection.ts
+  - src/pipeline/edge-selection.test.ts
 modifies: []
 structured:
   npm_dependencies: {}
