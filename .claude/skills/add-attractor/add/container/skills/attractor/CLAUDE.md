@@ -9,6 +9,7 @@ Based on StrongDM's [Attractor](https://github.com/brynary/attractor) — a Type
 Attractor requires the Bun runtime. Install once per session:
 
 ```bash
+sudo apt-get update && sudo apt-get install -y unzip
 curl -fsSL https://bun.sh/install | bash
 source ~/.bashrc
 
