@@ -13,6 +13,12 @@ adds:
   - src/pipeline/duration.ts
   - src/pipeline/label.ts
   - src/pipeline/duration.test.ts
+  - src/pipeline/context.ts
+  - src/pipeline/outcome.ts
+  - src/pipeline/context.test.ts
+  - src/pipeline/lexer.ts
+  - src/pipeline/parser.ts
+  - src/pipeline/parser.test.ts
 modifies: []
 structured:
   npm_dependencies: {}
