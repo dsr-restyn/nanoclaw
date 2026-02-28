@@ -21,6 +21,12 @@ adds:
   - src/pipeline/parser.test.ts
   - src/pipeline/checkpoint.ts
   - src/pipeline/checkpoint.test.ts
+  - src/pipeline/validate.ts
+  - src/pipeline/validate.test.ts
+  - src/pipeline/events.ts
+  - src/pipeline/events.test.ts
+  - src/pipeline/conditions.ts
+  - src/pipeline/conditions.test.ts
 modifies: []
 structured:
   npm_dependencies: {}
