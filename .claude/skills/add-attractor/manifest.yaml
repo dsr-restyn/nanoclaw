@@ -33,7 +33,10 @@ adds:
   - src/pipeline/orchestrator.test.ts
   - src/pipeline/container-handler.ts
   - src/pipeline/container-handler.test.ts
-modifies: []
+  - src/pipeline/runner.ts
+  - src/pipeline/runner.test.ts
+modifies:
+  - src/ipc.ts
 structured:
   npm_dependencies: {}
   env_additions: []
