@@ -19,6 +19,8 @@ adds:
   - src/pipeline/lexer.ts
   - src/pipeline/parser.ts
   - src/pipeline/parser.test.ts
+  - src/pipeline/checkpoint.ts
+  - src/pipeline/checkpoint.test.ts
 modifies: []
 structured:
   npm_dependencies: {}
