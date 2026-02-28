@@ -1,0 +1,22 @@
+digraph BugFix {
+  graph [goal="Fix reported bug and prevent regression"]
+
+  start [shape=Mdiamond]
+  exit [shape=Msquare]
+
+  investigate [label="Investigate Bug", prompt="Reproduce the bug and understand root cause. Review error messages, stack traces, and relevant code. Identify why the bug occurs and what conditions trigger it."]
+  design_fix [label="Design Fix", prompt="Design a fix that addresses the root cause without breaking existing functionality. Consider: edge cases, performance impact, backwards compatibility."]
+  implement_fix [label="Implement Fix", prompt="Implement the bug fix. Make minimal changes necessary to fix the issue. Update any affected documentation or comments."]
+  add_regression_test [label="Add Regression Test", prompt="Create a test that reproduces the bug before the fix and passes after. This prevents the bug from reoccurring."]
+  run_tests [shape=parallelogram, tool_command="pytest tests/ -v"]
+  fix_if_fail [label="Fix Failures", prompt="Analyze test failures. Either fix the implementation or update tests if requirements changed."]
+
+  start -> investigate
+  investigate -> design_fix
+  design_fix -> implement_fix
+  implement_fix -> add_regression_test
+  add_regression_test -> run_tests
+  run_tests -> exit [label="Pass", condition="outcome=success"]
+  run_tests -> fix_if_fail [label="Fail", condition="outcome!=success"]
+  fix_if_fail -> run_tests
+}

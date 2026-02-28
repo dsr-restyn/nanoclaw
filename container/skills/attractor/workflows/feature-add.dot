@@ -1,0 +1,25 @@
+digraph FeatureImplementation {
+  graph [goal="Implement feature according to specification"]
+
+  start [shape=Mdiamond]
+  exit [shape=Msquare]
+
+  analyze [label="Analyze Codebase", prompt="Review the codebase to understand existing patterns, architecture, and where the new feature should be integrated. Identify similar features and reusable components."]
+  design [label="Design Implementation", prompt="Create a detailed implementation plan including: file structure, API design, data models, integration points, and potential risks. Consider edge cases and error handling."]
+  approve [shape=hexagon, label="Human Approval Gate"]
+  implement [label="Write Code", prompt="Implement the feature according to the approved design. Follow existing code style and patterns. Include docstrings and inline comments for complex logic."]
+  test [label="Write Tests", prompt="Create comprehensive tests covering: happy path, edge cases, error handling, and integration scenarios. Aim for high coverage of the new code."]
+  validate [shape=parallelogram, tool_command="pytest tests/ -v"]
+  fix_failures [label="Fix Test Failures", prompt="Analyze test failures and fix the implementation. If tests are incorrect, update them. If design is flawed, revise the implementation."]
+
+  start -> analyze
+  analyze -> design
+  design -> approve
+  approve -> implement [label="[A] Approved"]
+  approve -> design [label="[R] Rejected"]
+  implement -> test
+  test -> validate
+  validate -> exit [label="Pass", condition="outcome=success"]
+  validate -> fix_failures [label="Fail", condition="outcome!=success"]
+  fix_failures -> validate
+}

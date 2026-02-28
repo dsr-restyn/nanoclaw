@@ -1,0 +1,28 @@
+digraph Refactoring {
+  graph [goal="Refactor code while maintaining functionality"]
+
+  start [shape=Mdiamond]
+  exit [shape=Msquare]
+
+  analyze [label="Analyze Code", prompt="Review the code to be refactored. Understand current behavior, identify problems (duplication, complexity, poor naming, etc.), and plan improvements."]
+  baseline_tests [label="Ensure Test Coverage", prompt="Verify existing tests cover the code being refactored. Add tests if coverage is insufficient. This ensures refactoring doesn't break functionality."]
+  run_baseline [shape=parallelogram, tool_command="pytest tests/ -v"]
+  plan_refactor [label="Plan Refactoring", prompt="Design the refactored structure: new class/function organization, naming improvements, pattern applications. List specific changes to make."]
+  approve [shape=hexagon, label="Approve Plan"]
+  refactor [label="Execute Refactoring", prompt="Refactor the code according to plan. Make incremental changes. Keep functionality identical - only improve structure and readability."]
+  verify_tests [shape=parallelogram, tool_command="pytest tests/ -v"]
+  fix_breaks [label="Fix Breakages", prompt="Tests failed after refactoring. Identify what broke and fix it. Refactoring should not change behavior."]
+
+  start -> analyze
+  analyze -> baseline_tests
+  baseline_tests -> run_baseline
+  run_baseline -> plan_refactor [label="Pass", condition="outcome=success"]
+  run_baseline -> baseline_tests [label="Fail"]
+  plan_refactor -> approve
+  approve -> refactor [label="[A] Approved"]
+  approve -> plan_refactor [label="[R] Rejected"]
+  refactor -> verify_tests
+  verify_tests -> exit [label="Pass", condition="outcome=success"]
+  verify_tests -> fix_breaks [label="Fail", condition="outcome!=success"]
+  fix_breaks -> verify_tests
+}
