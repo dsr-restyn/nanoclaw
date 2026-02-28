@@ -18,6 +18,22 @@ git clone https://github.com/brynary/attractor.git /tmp/attractor
 cd /tmp/attractor && bun install
 ```
 
+## Progress Reporting
+
+**Always send a status update via `mcp__nanoclaw__send_message` when entering each workflow node.** This lets the user follow along in real time.
+
+Format: `[Pipeline] {workflow_name}: {node_label} ({node_number}/{total_nodes})`
+
+Examples:
+- `[Pipeline] FeatureImplementation: Analyze Codebase (1/5)`
+- `[Pipeline] FeatureImplementation: Write Code (3/5)`
+- `[Pipeline] BugFix: Run Tests — PASS (4/5)`
+- `[Pipeline] BugFix: Fix Failures — retry 2/3 (4/5)`
+
+Also send a final summary when the workflow completes or fails:
+- `[Pipeline] FeatureImplementation: Complete — all tests passing`
+- `[Pipeline] BugFix: Failed — max retries exceeded at Run Tests`
+
 ## Running a Workflow
 
 ```bash
