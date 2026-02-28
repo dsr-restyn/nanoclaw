@@ -8,6 +8,11 @@ adds:
   - container/skills/attractor/workflows/bug-fix.dot
   - container/skills/attractor/workflows/code-review.dot
   - container/skills/attractor/workflows/refactor.dot
+  - src/pipeline/tokens.ts
+  - src/pipeline/types.ts
+  - src/pipeline/duration.ts
+  - src/pipeline/label.ts
+  - src/pipeline/duration.test.ts
 modifies: []
 structured:
   npm_dependencies: {}
