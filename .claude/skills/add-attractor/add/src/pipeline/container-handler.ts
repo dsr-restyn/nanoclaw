@@ -2,9 +2,7 @@ import type { Node, Graph } from './types.js';
 import { getStringAttr } from './types.js';
 import { Context } from './context.js';
 import { createOutcome, StageStatus, type Outcome } from './outcome.js';
-
-/** Handler function that processes a node and returns an outcome. */
-export type NodeHandler = (node: Node, context: Context, graph: Graph) => Promise<Outcome>;
+import type { NodeHandler } from './orchestrator.js';
 
 export function buildNodePrompt(node: Node, context: Context): string {
   const prompt = getStringAttr(node.attributes, 'prompt');

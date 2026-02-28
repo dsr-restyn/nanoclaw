@@ -15,7 +15,7 @@ export type NodeHandler = (
 
 export interface OrchestratorConfig {
   handlers: Record<string, NodeHandler>;
-  onEvent: (event: PipelineEvent) => void;
+  onEvent: (event: PipelineEvent) => void | Promise<void>;
   checkpointDir?: string;
   verbosity?: Verbosity;
 }
@@ -36,6 +36,14 @@ const SHAPE_TO_HANDLER: Record<string, string> = {
   component: 'parallel',
   tripleoctagon: 'fan_in',
 };
+
+function retryDelay(attempt: number): number {
+  const base = 200;
+  const factor = 2;
+  const max = 60_000;
+  const delay = Math.min(base * factor ** attempt, max);
+  return delay * (0.5 + Math.random() * 0.5);
+}
 
 export class PipelineOrchestrator {
   private config: OrchestratorConfig;
@@ -79,7 +87,7 @@ export class PipelineOrchestrator {
     const totalNodes = graph.nodes.size;
     let stageNum = 0;
 
-    this.config.onEvent({
+    await this.config.onEvent({
       kind: 'pipeline_started',
       pipelineId,
       goal,
@@ -111,7 +119,7 @@ export class PipelineOrchestrator {
             currentNodeId = retryTarget;
             continue;
           }
-          this.config.onEvent({
+          await this.config.onEvent({
             kind: 'pipeline_failed',
             pipelineId,
             goal,
@@ -122,7 +130,7 @@ export class PipelineOrchestrator {
         }
 
         completedNodes.push(currentNodeId);
-        this.config.onEvent({
+        await this.config.onEvent({
           kind: 'pipeline_completed',
           pipelineId,
           goal,
@@ -156,7 +164,7 @@ export class PipelineOrchestrator {
 
       // Execute handler
       stageNum++;
-      this.config.onEvent({
+      await this.config.onEvent({
         kind: 'stage_started',
         pipelineId,
         nodeId: currentNodeId,
@@ -168,7 +176,7 @@ export class PipelineOrchestrator {
 
       const handler = this.config.handlers[handlerType];
       if (!handler) {
-        this.config.onEvent({
+        await this.config.onEvent({
           kind: 'error',
           pipelineId,
           nodeId: currentNodeId,
@@ -198,7 +206,7 @@ export class PipelineOrchestrator {
       nodeOutcomes[currentNodeId] = outcome.status;
       completedNodes.push(currentNodeId);
 
-      this.config.onEvent({
+      await this.config.onEvent({
         kind: 'stage_completed',
         pipelineId,
         nodeId: currentNodeId,
@@ -233,7 +241,7 @@ export class PipelineOrchestrator {
         if (retryCount < maxRetries) {
           nodeRetries[currentNodeId] = retryCount + 1;
           context.set(`internal.retry_count.${currentNodeId}`, retryCount + 1);
-          this.config.onEvent({
+          await this.config.onEvent({
             kind: 'stage_retrying',
             pipelineId,
             nodeId: currentNodeId,
@@ -242,6 +250,8 @@ export class PipelineOrchestrator {
             maxRetries,
             timestamp: new Date(),
           });
+          const delay = retryDelay(retryCount);
+          await new Promise(resolve => setTimeout(resolve, delay));
           completedNodes.pop();
           stageNum--;
           continue;
@@ -258,7 +268,7 @@ export class PipelineOrchestrator {
             continue;
           }
         }
-        this.config.onEvent({
+        await this.config.onEvent({
           kind: 'pipeline_failed',
           pipelineId,
           goal,
@@ -270,7 +280,7 @@ export class PipelineOrchestrator {
 
       const edgeLabel = getStringAttr(edge.attributes, 'label');
       if (edgeLabel) {
-        this.config.onEvent({
+        await this.config.onEvent({
           kind: 'edge_selected',
           pipelineId,
           fromNode: currentNodeId,
@@ -284,7 +294,7 @@ export class PipelineOrchestrator {
     }
 
     if (iterations >= maxIterations) {
-      this.config.onEvent({
+      await this.config.onEvent({
         kind: 'pipeline_failed',
         pipelineId,
         goal,

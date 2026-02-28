@@ -1,5 +1,8 @@
 import type { Graph } from './types.js';
 import { getStringAttr, incomingEdges, outgoingEdges } from './types.js';
+import { evaluateCondition } from './conditions.js';
+import { createOutcome, StageStatus } from './outcome.js';
+import { Context } from './context.js';
 
 export interface ValidationResult {
   errors: string[];
@@ -74,6 +77,20 @@ export function validateGraph(graph: Graph): ValidationResult {
       const label = getStringAttr(node.attributes, 'label');
       if (!prompt && !label) {
         warnings.push(`Codergen node "${id}" has no prompt or label`);
+      }
+    }
+  }
+
+  // Validate edge condition syntax
+  const dummyOutcome = createOutcome({ status: StageStatus.SUCCESS });
+  const dummyCtx = new Context();
+  for (const edge of graph.edges) {
+    const condition = getStringAttr(edge.attributes, 'condition');
+    if (condition) {
+      try {
+        evaluateCondition(condition, dummyOutcome, dummyCtx);
+      } catch {
+        errors.push(`Edge "${edge.from}" → "${edge.to}" has invalid condition: "${condition}"`);
       }
     }
   }
