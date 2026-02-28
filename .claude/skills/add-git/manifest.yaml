@@ -1,0 +1,15 @@
+skill: git
+version: 1.0.0
+description: "Git push/pull for agent containers — main group gets GitHub credentials via stdin secrets"
+core_version: 0.1.0
+adds: []
+modifies:
+  - src/container-runner.ts
+  - groups/global/CLAUDE.md
+structured:
+  npm_dependencies: {}
+  env_additions:
+    - GITHUB_TOKEN
+conflicts: []
+depends: []
+test: "npm run build"

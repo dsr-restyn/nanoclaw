@@ -1,0 +1,14 @@
+skill: model-config
+version: 1.0.0
+description: "Configure which Claude model agent containers use via CLAUDE_MODEL env var"
+core_version: 0.1.0
+adds: []
+modifies:
+  - src/container-runner.ts
+structured:
+  npm_dependencies: {}
+  env_additions:
+    - CLAUDE_MODEL
+conflicts: []
+depends: []
+test: "npm run build"
