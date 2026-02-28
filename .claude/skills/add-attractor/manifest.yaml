@@ -29,6 +29,10 @@ adds:
   - src/pipeline/conditions.test.ts
   - src/pipeline/edge-selection.ts
   - src/pipeline/edge-selection.test.ts
+  - src/pipeline/orchestrator.ts
+  - src/pipeline/orchestrator.test.ts
+  - src/pipeline/container-handler.ts
+  - src/pipeline/container-handler.test.ts
 modifies: []
 structured:
   npm_dependencies: {}
