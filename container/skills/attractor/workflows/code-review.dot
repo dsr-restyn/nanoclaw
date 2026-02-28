@@ -1,0 +1,22 @@
+digraph CodeReview {
+  graph [goal="Review and improve code quality"]
+  node [timeout="900s"]
+
+  start [shape=Mdiamond]
+  exit [shape=Msquare]
+
+  analyze [label="Analyze", prompt="Analyze the codebase for code quality issues: complexity, duplication, naming, documentation, test coverage, security vulnerabilities, and performance concerns."]
+  plan_fixes [label="Plan Fixes", prompt="Create a prioritized plan to fix the issues found. Group related changes together. Estimate effort and risk for each fix."]
+  implement [label="Fix", prompt="Implement the planned fixes. Make one logical change at a time. Update tests and documentation as needed."]
+  verify [shape=parallelogram, tool_command="pytest tests/ -v && npm run lint"]
+  review [shape=hexagon, label="Human Review"]
+
+  start -> analyze
+  analyze -> plan_fixes
+  plan_fixes -> implement
+  implement -> verify
+  verify -> review [label="Pass", condition="outcome=success"]
+  verify -> implement [label="Fail", condition="outcome!=success"]
+  review -> exit [label="[A] Approve"]
+  review -> implement [label="[R] Revise"]
+}

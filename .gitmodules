@@ -1,0 +1,3 @@
+[submodule "container/skills/attractor/lib"]
+	path = container/skills/attractor/lib
+	url = https://github.com/brynary/attractor.git
