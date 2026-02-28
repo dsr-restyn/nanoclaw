@@ -325,11 +325,10 @@ export function parseTokens(tokens: ReadonlyArray<Token>): Graph {
     const attrs = new Map<string, AttributeValue>();
     expect(TokenKind.LBRACKET);
 
-    if (!check(TokenKind.RBRACKET)) {
+    while (!check(TokenKind.RBRACKET) && !check(TokenKind.EOF)) {
       parseAttr(attrs);
-      while (match(TokenKind.COMMA)) {
-        parseAttr(attrs);
-      }
+      // DOT allows comma, semicolon, or whitespace between attributes
+      match(TokenKind.COMMA) || match(TokenKind.SEMICOLON);
     }
 
     expect(TokenKind.RBRACKET);
