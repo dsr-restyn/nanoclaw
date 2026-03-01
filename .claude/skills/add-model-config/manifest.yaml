@@ -5,6 +5,7 @@ core_version: 0.1.0
 adds: []
 modifies:
   - src/container-runner.ts
+  - container/agent-runner/src/index.ts
 structured:
   npm_dependencies: {}
   env_additions:

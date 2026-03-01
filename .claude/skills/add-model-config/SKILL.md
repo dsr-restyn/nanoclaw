@@ -31,10 +31,20 @@ npx tsx scripts/apply-skill.ts .claude/skills/add-model-config
 
 This deterministically:
 - Three-way merges `CLAUDE_MODEL` env var forwarding into `buildContainerArgs()` in `src/container-runner.ts`
+- Three-way merges `CLAUDE_MODEL` reading into the SDK `query()` call in `container/agent-runner/src/index.ts`
 - Appends `CLAUDE_MODEL` to `.env.example`
 
-If the apply reports merge conflicts, read the intent file:
-- `modify/src/container-runner.ts.intent.md` — CLAUDE_MODEL passthrough
+If the apply reports merge conflicts, read the intent files:
+- `modify/src/container-runner.ts.intent.md` — CLAUDE_MODEL passthrough from host to container
+- `modify/container/agent-runner/src/index.ts.intent.md` — CLAUDE_MODEL reading inside the container
+
+### Sync agent-runner to existing groups
+
+The agent-runner source is copied per-group on first use and never auto-updated. After applying, delete stale copies so they get recreated with the new code on next container spawn:
+
+```bash
+rm -rf data/sessions/*/agent-runner-src
+```
 
 ### Validate
 
@@ -50,10 +60,10 @@ npm run build
 CLAUDE_MODEL=claude-opus-4-20250514
 ```
 
-Use the full model ID. Common options:
-- `claude-opus-4-20250514` — most capable
-- `claude-sonnet-4-6-20250514` — fast and capable
-- `claude-sonnet-4-20250514` — balanced
+Use a valid model ID. Common options:
+- `claude-opus-4-6` — most capable
+- `claude-sonnet-4-6` — fast and capable
+- `claude-sonnet-4-20250514` — previous generation
 
 The SDK will fall back to its default if the ID is invalid, so double-check the spelling.
 

@@ -197,8 +197,9 @@ function buildContainerArgs(mounts: VolumeMount[], containerName: string): strin
   args.push('-e', `TZ=${TIMEZONE}`);
 
   // Forward CLAUDE_MODEL so the SDK uses the configured model
-  if (process.env.CLAUDE_MODEL) {
-    args.push('-e', `CLAUDE_MODEL=${process.env.CLAUDE_MODEL}`);
+  const { CLAUDE_MODEL } = readEnvFile(['CLAUDE_MODEL']);
+  if (CLAUDE_MODEL) {
+    args.push('-e', `CLAUDE_MODEL=${CLAUDE_MODEL}`);
   }
 
   // Forward env vars registered by update_config runtime updates.
