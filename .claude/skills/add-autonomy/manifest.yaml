@@ -1,0 +1,13 @@
+skill: autonomy
+version: 1.0.0
+description: "Teach the main agent about autonomous work capabilities — propose_work, request_resource, request_host_access IPC actions"
+core_version: 0.1.0
+adds: []
+modifies:
+  - groups/main/CLAUDE.md
+structured:
+  npm_dependencies: {}
+  env_additions: []
+conflicts: []
+depends: []
+test: "npm run build"
