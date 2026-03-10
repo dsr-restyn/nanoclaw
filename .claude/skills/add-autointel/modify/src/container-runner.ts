@@ -360,7 +360,7 @@ function buildVolumeMounts(
   if (AUTOINTEL_PATH && fs.existsSync(AUTOINTEL_PATH)) {
     mounts.push({
       hostPath: AUTOINTEL_PATH,
-      containerPath: '/workspace/extra/autoIntel',
+      containerPath: '/workspace/group/autoIntel',
       readonly: true,
     });
   }

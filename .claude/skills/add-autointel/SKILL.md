@@ -113,11 +113,11 @@ Run with debug logging:
 LOG_LEVEL=debug npm run dev
 ```
 
-Look for container mount logs showing `/workspace/extra/autoIntel (ro)`.
+Look for container mount logs showing `/workspace/group/autoIntel (ro)`.
 
 ### Check agent discovers autoIntel CLAUDE.md
 
-The agent's `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` setting (already enabled) auto-discovers `/workspace/extra/autoIntel/CLAUDE.md`. Check agent logs for autoIntel context being loaded.
+The agent's `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` setting (already enabled) auto-discovers `/workspace/group/autoIntel/CLAUDE.md`. Check agent logs for autoIntel context being loaded.
 
 ### End-to-end test
 
@@ -128,7 +128,7 @@ The agent's `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` setting (already enab
 
 ## How It Works
 
-- **Mount:** `AUTOINTEL_PATH` directory mounted read-only at `/workspace/extra/autoIntel` in every agent container
+- **Mount:** `AUTOINTEL_PATH` directory mounted read-only at `/workspace/group/autoIntel` in every agent container
 - **Context:** Agent reads `CLAUDE.md` from autoIntel (research methodology, templates, guardrails)
 - **Isolation:** Each client group has its own container, config, and history. autoIntel context is shared read-only.
 - **DooD:** Orchestrator runs in container, spawns agent containers via Docker socket mounted from host
