@@ -1,0 +1,27 @@
+# autoIntel docker-compose overlay
+# Usage: docker compose -f docker-compose.yaml -f docker-compose.autointel.yaml up -d
+
+services:
+  nanoclaw:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./store:/app/store
+      - ./groups:/app/groups
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ~/.gmail-mcp:/home/node/.gmail-mcp
+      - ~/.claude/.credentials.json:/home/node/.claude/.credentials.json:ro
+      - ../autoIntel:/app/autoIntel:ro
+    env_file: .env
+    environment:
+      - AUTOINTEL_PATH=/app/autoIntel
+      - EMAIL_ENABLED=true
+    ports:
+      - "4080:4080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

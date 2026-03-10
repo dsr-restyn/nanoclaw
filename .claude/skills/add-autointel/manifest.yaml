@@ -1,0 +1,17 @@
+skill: autointel
+version: 1.0.0
+description: "autoIntel competitive intelligence platform provisioning and DooD deployment"
+core_version: 0.1.0
+adds:
+  - docker-compose.autointel.yaml
+  - scripts/provision-client.ts
+modifies:
+  - src/container-runner.ts
+  - src/config.ts
+structured:
+  env_additions:
+    - AUTOINTEL_PATH
+conflicts: []
+depends:
+  - email-channel
+test: "npm run build"

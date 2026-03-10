@@ -1,0 +1,20 @@
+skill: email-channel
+version: 1.0.0
+description: "Gmail two-way email channel with sender-based group routing"
+core_version: 0.1.0
+adds:
+  - src/channels/email.ts
+  - src/channels/email.test.ts
+modifies:
+  - src/channels/index.ts
+  - src/config.ts
+structured:
+  npm_dependencies:
+    googleapis: "^171.4.0"
+  env_additions:
+    - EMAIL_ENABLED
+    - EMAIL_POLL_INTERVAL
+    - EMAIL_INBOX_ADDRESS
+conflicts: []
+depends: []
+test: "npx vitest run src/channels/email.test.ts"
