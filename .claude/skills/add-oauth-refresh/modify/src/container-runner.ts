@@ -8,8 +8,6 @@ import os from 'os';
 import path from 'path';
 
 import {
-  ANYTYPE_API_KEY,
-  AUTOINTEL_PATH,
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
@@ -19,6 +17,8 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+import { detectAuthMode } from './credential-proxy.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -28,8 +28,6 @@ import {
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
-import { detectAuthMode } from './credential-proxy.js';
-import { readEnvFile } from './env.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
@@ -249,17 +247,6 @@ function buildVolumeMounts(
     }
   }
 
-  // Gmail credentials directory (MCP may need to refresh tokens)
-  const homeDir = process.env.HOME || '/home/user';
-  const gmailDir = path.join(homeDir, '.gmail-mcp');
-  if (fs.existsSync(gmailDir)) {
-    mounts.push({
-      hostPath: gmailDir,
-      containerPath: '/home/node/.gmail-mcp',
-      readonly: false,
-    });
-  }
-
   // Per-group Claude sessions directory (isolated from other groups)
   // Each group gets their own .claude/ to prevent cross-group session access
   const groupSessionsDir = path.join(
@@ -271,26 +258,19 @@ function buildVolumeMounts(
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(
-      settingsFile,
-      JSON.stringify(
-        {
-          env: {
-            // Enable agent swarms (subagent orchestration)
-            // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            // Load CLAUDE.md from additional mounted directories
-            // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
-            CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-            // Enable Claude's memory feature (persists user preferences between sessions)
-            // https://code.claude.com/docs/en/memory#manage-auto-memory
-            CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
-          },
-        },
-        null,
-        2,
-      ) + '\n',
-    );
+    fs.writeFileSync(settingsFile, JSON.stringify({
+      env: {
+        // Enable agent swarms (subagent orchestration)
+        // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+        // Load CLAUDE.md from additional mounted directories
+        // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
+        CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+        // Enable Claude's memory feature (persists user preferences between sessions)
+        // https://code.claude.com/docs/en/memory#manage-auto-memory
+        CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
+      },
+    }, null, 2) + '\n');
   }
 
   // Sync skills from container/skills/ into each group's .claude/skills/
@@ -325,18 +305,8 @@ function buildVolumeMounts(
   // Copy agent-runner source into a per-group writable location so agents
   // can customize it (add tools, change behavior) without affecting other
   // groups. Recompiled on container startup via entrypoint.sh.
-  const agentRunnerSrc = path.join(
-    projectRoot,
-    'container',
-    'agent-runner',
-    'src',
-  );
-  const groupAgentRunnerDir = path.join(
-    DATA_DIR,
-    'sessions',
-    group.folder,
-    'agent-runner-src',
-  );
+  const agentRunnerSrc = path.join(projectRoot, 'container', 'agent-runner', 'src');
+  const groupAgentRunnerDir = path.join(DATA_DIR, 'sessions', group.folder, 'agent-runner-src');
   if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
     fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
   }
@@ -356,15 +326,6 @@ function buildVolumeMounts(
     mounts.push(...validatedMounts);
   }
 
-  // Mount autoIntel context repo (shared, read-only) when configured
-  if (AUTOINTEL_PATH && fs.existsSync(AUTOINTEL_PATH)) {
-    mounts.push({
-      hostPath: AUTOINTEL_PATH,
-      containerPath: '/workspace/group/autoIntel',
-      readonly: true,
-    });
-  }
-
   return mounts;
 }
 
@@ -374,21 +335,10 @@ async function buildContainerArgs(
 ): Promise<string[]> {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
-  // Allow containers to reach host services (e.g. Anytype headless server)
-  args.push('--add-host=host.docker.internal:host-gateway');
-
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
-  // Forward CLAUDE_MODEL so the SDK uses the configured model
-  const { CLAUDE_MODEL } = readEnvFile(['CLAUDE_MODEL']);
-  if (CLAUDE_MODEL) {
-    args.push('-e', `CLAUDE_MODEL=${CLAUDE_MODEL}`);
-  }
-
-  // Auth: try credential proxy first, fall back to direct token passthrough.
-  // The proxy requires org:create_api_key scope for OAuth token exchange.
-  // If the token lacks that scope, pass it directly to the container instead.
+  // Auth: credential proxy for API key mode, direct token for OAuth mode.
   const authMode = detectAuthMode();
   if (authMode === 'api-key') {
     // API key mode: route through credential proxy
@@ -399,8 +349,6 @@ async function buildContainerArgs(
     args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
   } else {
     // OAuth mode: pass real token directly — SDK handles auth natively.
-    // The credential proxy's exchange flow requires org:create_api_key scope
-    // which not all account types have.
     // Read from ~/.claude/.credentials.json (auto-refreshed by Claude Code)
     // rather than .env (goes stale when token expires overnight).
     const oauthToken = await readFreshOAuthToken();
@@ -409,17 +357,6 @@ async function buildContainerArgs(
 
   // Runtime-specific args for host gateway resolution
   args.push(...hostGatewayArgs());
-
-  // Forward third-party integration keys (not Anthropic credentials).
-  // These bypass the credential proxy since they're for external services.
-  const integrationKeys = readEnvFile([
-    'ANYTYPE_API_KEY',
-    'LOGSEQ_GRAPH_PATH',
-    'NTFY_TOPIC',
-  ]);
-  for (const [key, value] of Object.entries(integrationKeys)) {
-    if (value) args.push('-e', `${key}=${value}`);
-  }
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
@@ -589,16 +526,11 @@ export async function runContainerAgent(
 
     const killOnTimeout = () => {
       timedOut = true;
-      logger.error(
-        { group: group.name, containerName },
-        'Container timeout, stopping gracefully',
-      );
+      logger.error({ group: group.name, containerName }, 'Container timeout, stopping gracefully');
+      // exec is used here with a trusted, non-user-input container name
       exec(stopContainer(containerName), { timeout: 15000 }, (err) => {
         if (err) {
-          logger.warn(
-            { group: group.name, containerName, err },
-            'Graceful stop failed, force killing',
-          );
+          logger.warn({ group: group.name, containerName, err }, 'Graceful stop failed, force killing');
           container.kill('SIGKILL');
         }
       });
@@ -619,18 +551,15 @@ export async function runContainerAgent(
       if (timedOut) {
         const ts = new Date().toISOString().replace(/[:.]/g, '-');
         const timeoutLog = path.join(logsDir, `container-${ts}.log`);
-        fs.writeFileSync(
-          timeoutLog,
-          [
-            `=== Container Run Log (TIMEOUT) ===`,
-            `Timestamp: ${new Date().toISOString()}`,
-            `Group: ${group.name}`,
-            `Container: ${containerName}`,
-            `Duration: ${duration}ms`,
-            `Exit Code: ${code}`,
-            `Had Streaming Output: ${hadStreamingOutput}`,
-          ].join('\n'),
-        );
+        fs.writeFileSync(timeoutLog, [
+          `=== Container Run Log (TIMEOUT) ===`,
+          `Timestamp: ${new Date().toISOString()}`,
+          `Group: ${group.name}`,
+          `Container: ${containerName}`,
+          `Duration: ${duration}ms`,
+          `Exit Code: ${code}`,
+          `Had Streaming Output: ${hadStreamingOutput}`,
+        ].join('\n'));
 
         // Timeout after output = idle cleanup, not failure.
         // The agent already sent its response; this is just the
@@ -665,8 +594,7 @@ export async function runContainerAgent(
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const logFile = path.join(logsDir, `container-${timestamp}.log`);
-      const isVerbose =
-        process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace';
+      const isVerbose = process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace';
 
       const logLines = [
         `=== Container Run Log ===`,
@@ -809,10 +737,7 @@ export async function runContainerAgent(
 
     container.on('error', (err) => {
       clearTimeout(timeout);
-      logger.error(
-        { group: group.name, containerName, error: err },
-        'Container spawn error',
-      );
+      logger.error({ group: group.name, containerName, error: err }, 'Container spawn error');
       resolve({
         status: 'error',
         result: null,

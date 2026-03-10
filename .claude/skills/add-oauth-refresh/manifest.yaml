@@ -1,13 +1,17 @@
 skill: oauth-refresh
-version: 1.0.0
-description: "Auto-refresh Claude OAuth tokens from ~/.claude/.credentials.json for container auth"
+version: 1.1.0
+description: "Auto-refresh Claude OAuth tokens, credential proxy for container isolation, .env shadow mount"
 core_version: 0.1.0
-adds: []
+adds:
+  - src/credential-proxy.ts
 modifies:
+  - src/config.ts
+  - src/container-runtime.ts
   - src/container-runner.ts
 structured:
   npm_dependencies: {}
-  env_additions: []
+  env_additions:
+    - CREDENTIAL_PROXY_PORT
 conflicts: []
 depends: []
 test: "npm run build"

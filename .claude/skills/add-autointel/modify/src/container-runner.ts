@@ -4,166 +4,24 @@
  */
 import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 
 import {
-  ANYTYPE_API_KEY,
   AUTOINTEL_PATH,
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
-  CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
-import {
-  CONTAINER_HOST_GATEWAY,
-  CONTAINER_RUNTIME_BIN,
-  hostGatewayArgs,
-  readonlyMountArgs,
-  stopContainer,
-} from './container-runtime.js';
-import { detectAuthMode } from './credential-proxy.js';
-import { readEnvFile } from './env.js';
+import { CONTAINER_RUNTIME_BIN, readonlyMountArgs, stopContainer } from './container-runtime.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
-
-// OAuth refresh configuration (extracted from Claude Code binary)
-const OAUTH_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
-const OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
-// Refresh 10 minutes before expiry to avoid race conditions
-const REFRESH_BUFFER_MS = 10 * 60 * 1000;
-
-interface OAuthCredentials {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-  scopes?: string[];
-  subscriptionType?: string;
-  rateLimitTier?: string;
-}
-
-/**
- * Refresh the OAuth token using the refresh token.
- * Writes new tokens back to credentials file so Claude Code stays in sync.
- */
-async function refreshOAuthToken(
-  credPath: string,
-  creds: Record<string, unknown>,
-  oauth: OAuthCredentials,
-): Promise<string> {
-  const { default: https } = await import('https');
-
-  const body = JSON.stringify({
-    grant_type: 'refresh_token',
-    refresh_token: oauth.refreshToken,
-    client_id: OAUTH_CLIENT_ID,
-  });
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      OAUTH_TOKEN_URL,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body),
-        },
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk: Buffer) => { data += chunk; });
-        res.on('end', () => {
-          try {
-            const response = JSON.parse(data);
-            if (!response.access_token) {
-              logger.error({ response }, 'OAuth refresh failed');
-              // Return old token as fallback
-              resolve(oauth.accessToken);
-              return;
-            }
-
-            // Update credentials file with new tokens
-            const updatedOauth: OAuthCredentials = {
-              ...oauth,
-              accessToken: response.access_token,
-              refreshToken: response.refresh_token || oauth.refreshToken,
-              expiresAt: Date.now() + response.expires_in * 1000,
-            };
-
-            const updatedCreds = {
-              ...creds,
-              claudeAiOauth: updatedOauth,
-            };
-
-            // Atomic write: temp file + rename
-            const tmpPath = credPath + '.tmp';
-            fs.writeFileSync(tmpPath, JSON.stringify(updatedCreds, null, 2), {
-              mode: 0o600,
-            });
-            fs.renameSync(tmpPath, credPath);
-
-            logger.info(
-              { expiresIn: response.expires_in },
-              'OAuth token refreshed successfully',
-            );
-            resolve(response.access_token);
-          } catch (err) {
-            logger.error({ err }, 'Failed to parse OAuth refresh response');
-            resolve(oauth.accessToken);
-          }
-        });
-      },
-    );
-
-    req.on('error', (err) => {
-      logger.error({ err }, 'OAuth refresh request failed');
-      resolve(oauth.accessToken);
-    });
-
-    req.write(body);
-    req.end();
-  });
-}
-
-/**
- * Read the freshest OAuth token from ~/.claude/.credentials.json.
- * Auto-refreshes the token if it's near expiry, writing new tokens
- * back so Claude Code stays in sync.
- * Falls back to .env if the credentials file doesn't exist.
- */
-async function readFreshOAuthToken(): Promise<string> {
-  const homeDir = process.env.HOME || os.homedir();
-  const credPath = path.join(homeDir, '.claude', '.credentials.json');
-  try {
-    const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
-    const oauth = creds?.claudeAiOauth as OAuthCredentials | undefined;
-    if (!oauth?.accessToken) throw new Error('No access token');
-
-    // Check if token needs refresh
-    if (oauth.expiresAt && oauth.refreshToken) {
-      const timeUntilExpiry = oauth.expiresAt - Date.now();
-      if (timeUntilExpiry < REFRESH_BUFFER_MS) {
-        logger.info(
-          { expiresInMin: Math.round(timeUntilExpiry / 60000) },
-          'OAuth token near expiry, refreshing',
-        );
-        return await refreshOAuthToken(credPath, creds, oauth);
-      }
-    }
-
-    return oauth.accessToken;
-  } catch {
-    // credentials file missing or malformed — fall back
-  }
-  const secrets = readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_AUTH_TOKEN']);
-  return secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN || '';
-}
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -177,6 +35,7 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  secrets?: Record<string, string>;
 }
 
 export interface ContainerOutput {
@@ -212,17 +71,6 @@ function buildVolumeMounts(
       readonly: true,
     });
 
-    // Shadow .env so the agent cannot read secrets from the mounted project root.
-    // Credentials are injected by the credential proxy, never exposed to containers.
-    const envFile = path.join(projectRoot, '.env');
-    if (fs.existsSync(envFile)) {
-      mounts.push({
-        hostPath: '/dev/null',
-        containerPath: '/workspace/project/.env',
-        readonly: true,
-      });
-    }
-
     // Main also gets its group folder as the working directory
     mounts.push({
       hostPath: groupDir,
@@ -249,17 +97,6 @@ function buildVolumeMounts(
     }
   }
 
-  // Gmail credentials directory (MCP may need to refresh tokens)
-  const homeDir = process.env.HOME || '/home/user';
-  const gmailDir = path.join(homeDir, '.gmail-mcp');
-  if (fs.existsSync(gmailDir)) {
-    mounts.push({
-      hostPath: gmailDir,
-      containerPath: '/home/node/.gmail-mcp',
-      readonly: false,
-    });
-  }
-
   // Per-group Claude sessions directory (isolated from other groups)
   // Each group gets their own .claude/ to prevent cross-group session access
   const groupSessionsDir = path.join(
@@ -271,26 +108,19 @@ function buildVolumeMounts(
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(
-      settingsFile,
-      JSON.stringify(
-        {
-          env: {
-            // Enable agent swarms (subagent orchestration)
-            // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            // Load CLAUDE.md from additional mounted directories
-            // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
-            CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-            // Enable Claude's memory feature (persists user preferences between sessions)
-            // https://code.claude.com/docs/en/memory#manage-auto-memory
-            CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
-          },
-        },
-        null,
-        2,
-      ) + '\n',
-    );
+    fs.writeFileSync(settingsFile, JSON.stringify({
+      env: {
+        // Enable agent swarms (subagent orchestration)
+        // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+        // Load CLAUDE.md from additional mounted directories
+        // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
+        CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+        // Enable Claude's memory feature (persists user preferences between sessions)
+        // https://code.claude.com/docs/en/memory#manage-auto-memory
+        CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
+      },
+    }, null, 2) + '\n');
   }
 
   // Sync skills from container/skills/ into each group's .claude/skills/
@@ -325,18 +155,8 @@ function buildVolumeMounts(
   // Copy agent-runner source into a per-group writable location so agents
   // can customize it (add tools, change behavior) without affecting other
   // groups. Recompiled on container startup via entrypoint.sh.
-  const agentRunnerSrc = path.join(
-    projectRoot,
-    'container',
-    'agent-runner',
-    'src',
-  );
-  const groupAgentRunnerDir = path.join(
-    DATA_DIR,
-    'sessions',
-    group.folder,
-    'agent-runner-src',
-  );
+  const agentRunnerSrc = path.join(projectRoot, 'container', 'agent-runner', 'src');
+  const groupAgentRunnerDir = path.join(DATA_DIR, 'sessions', group.folder, 'agent-runner-src');
   if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
     fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
   }
@@ -368,58 +188,19 @@ function buildVolumeMounts(
   return mounts;
 }
 
-async function buildContainerArgs(
-  mounts: VolumeMount[],
-  containerName: string,
-): Promise<string[]> {
-  const args: string[] = ['run', '-i', '--rm', '--name', containerName];
+/**
+ * Read allowed secrets from .env for passing to the container via stdin.
+ * Secrets are never written to disk or mounted as files.
+ */
+function readSecrets(): Record<string, string> {
+  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
+}
 
-  // Allow containers to reach host services (e.g. Anytype headless server)
-  args.push('--add-host=host.docker.internal:host-gateway');
+function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
+  const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
-
-  // Forward CLAUDE_MODEL so the SDK uses the configured model
-  const { CLAUDE_MODEL } = readEnvFile(['CLAUDE_MODEL']);
-  if (CLAUDE_MODEL) {
-    args.push('-e', `CLAUDE_MODEL=${CLAUDE_MODEL}`);
-  }
-
-  // Auth: try credential proxy first, fall back to direct token passthrough.
-  // The proxy requires org:create_api_key scope for OAuth token exchange.
-  // If the token lacks that scope, pass it directly to the container instead.
-  const authMode = detectAuthMode();
-  if (authMode === 'api-key') {
-    // API key mode: route through credential proxy
-    args.push(
-      '-e',
-      `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
-    );
-    args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
-  } else {
-    // OAuth mode: pass real token directly — SDK handles auth natively.
-    // The credential proxy's exchange flow requires org:create_api_key scope
-    // which not all account types have.
-    // Read from ~/.claude/.credentials.json (auto-refreshed by Claude Code)
-    // rather than .env (goes stale when token expires overnight).
-    const oauthToken = await readFreshOAuthToken();
-    args.push('-e', `CLAUDE_CODE_OAUTH_TOKEN=${oauthToken}`);
-  }
-
-  // Runtime-specific args for host gateway resolution
-  args.push(...hostGatewayArgs());
-
-  // Forward third-party integration keys (not Anthropic credentials).
-  // These bypass the credential proxy since they're for external services.
-  const integrationKeys = readEnvFile([
-    'ANYTYPE_API_KEY',
-    'LOGSEQ_GRAPH_PATH',
-    'NTFY_TOPIC',
-  ]);
-  for (const [key, value] of Object.entries(integrationKeys)) {
-    if (value) args.push('-e', `${key}=${value}`);
-  }
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
@@ -458,7 +239,7 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = await buildContainerArgs(mounts, containerName);
+  const containerArgs = buildContainerArgs(mounts, containerName);
 
   logger.debug(
     {
@@ -498,8 +279,12 @@ export async function runContainerAgent(
     let stdoutTruncated = false;
     let stderrTruncated = false;
 
+    // Pass secrets via stdin (never written to disk or mounted as files)
+    input.secrets = readSecrets();
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
+    // Remove secrets from input so they don't appear in logs
+    delete input.secrets;
 
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive
     let parseBuffer = '';
@@ -589,16 +374,10 @@ export async function runContainerAgent(
 
     const killOnTimeout = () => {
       timedOut = true;
-      logger.error(
-        { group: group.name, containerName },
-        'Container timeout, stopping gracefully',
-      );
+      logger.error({ group: group.name, containerName }, 'Container timeout, stopping gracefully');
       exec(stopContainer(containerName), { timeout: 15000 }, (err) => {
         if (err) {
-          logger.warn(
-            { group: group.name, containerName, err },
-            'Graceful stop failed, force killing',
-          );
+          logger.warn({ group: group.name, containerName, err }, 'Graceful stop failed, force killing');
           container.kill('SIGKILL');
         }
       });
@@ -619,18 +398,15 @@ export async function runContainerAgent(
       if (timedOut) {
         const ts = new Date().toISOString().replace(/[:.]/g, '-');
         const timeoutLog = path.join(logsDir, `container-${ts}.log`);
-        fs.writeFileSync(
-          timeoutLog,
-          [
-            `=== Container Run Log (TIMEOUT) ===`,
-            `Timestamp: ${new Date().toISOString()}`,
-            `Group: ${group.name}`,
-            `Container: ${containerName}`,
-            `Duration: ${duration}ms`,
-            `Exit Code: ${code}`,
-            `Had Streaming Output: ${hadStreamingOutput}`,
-          ].join('\n'),
-        );
+        fs.writeFileSync(timeoutLog, [
+          `=== Container Run Log (TIMEOUT) ===`,
+          `Timestamp: ${new Date().toISOString()}`,
+          `Group: ${group.name}`,
+          `Container: ${containerName}`,
+          `Duration: ${duration}ms`,
+          `Exit Code: ${code}`,
+          `Had Streaming Output: ${hadStreamingOutput}`,
+        ].join('\n'));
 
         // Timeout after output = idle cleanup, not failure.
         // The agent already sent its response; this is just the
@@ -665,8 +441,7 @@ export async function runContainerAgent(
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const logFile = path.join(logsDir, `container-${timestamp}.log`);
-      const isVerbose =
-        process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace';
+      const isVerbose = process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace';
 
       const logLines = [
         `=== Container Run Log ===`,
@@ -809,10 +584,7 @@ export async function runContainerAgent(
 
     container.on('error', (err) => {
       clearTimeout(timeout);
-      logger.error(
-        { group: group.name, containerName, error: err },
-        'Container spawn error',
-      );
+      logger.error({ group: group.name, containerName, error: err }, 'Container spawn error');
       resolve({
         status: 'error',
         result: null,

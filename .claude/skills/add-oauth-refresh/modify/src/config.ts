@@ -4,8 +4,8 @@ import path from 'path';
 import { readEnvFile } from './env.js';
 
 // Read config values from .env (falls back to process.env).
-// Secrets are NOT read here — they stay on disk and are loaded only
-// where needed (container-runner.ts) to avoid leaking to child processes.
+// Secrets (API keys, tokens) are NOT read here — they are loaded only
+// by the credential proxy (credential-proxy.ts), never exposed to containers.
 const envConfig = readEnvFile([
   'ASSISTANT_NAME',
   'ASSISTANT_HAS_OWN_NUMBER',
@@ -44,6 +44,10 @@ export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(
   process.env.CONTAINER_MAX_OUTPUT_SIZE || '10485760',
   10,
 ); // 10MB default
+export const CREDENTIAL_PROXY_PORT = parseInt(
+  process.env.CREDENTIAL_PROXY_PORT || '3001',
+  10,
+);
 export const IPC_POLL_INTERVAL = 1000;
 export const IDLE_TIMEOUT = parseInt(
   process.env.IDLE_TIMEOUT || '1800000',
@@ -67,20 +71,3 @@ export const TRIGGER_PATTERN = new RegExp(
 // Uses system timezone by default
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-// Email channel configuration
-const emailEnv = readEnvFile(['EMAIL_ENABLED', 'EMAIL_POLL_INTERVAL', 'EMAIL_INBOX_ADDRESS']);
-
-export const EMAIL_ENABLED =
-  (process.env.EMAIL_ENABLED || emailEnv.EMAIL_ENABLED) === 'true';
-export const EMAIL_POLL_INTERVAL = parseInt(
-  process.env.EMAIL_POLL_INTERVAL || emailEnv.EMAIL_POLL_INTERVAL || '60',
-  10,
-) * 1000; // Convert to ms
-export const EMAIL_INBOX_ADDRESS =
-  process.env.EMAIL_INBOX_ADDRESS || emailEnv.EMAIL_INBOX_ADDRESS || '';
-
-// autoIntel context repo path (mounted read-only into agent containers)
-const autoIntelEnv = readEnvFile(['AUTOINTEL_PATH']);
-export const AUTOINTEL_PATH =
-  process.env.AUTOINTEL_PATH || autoIntelEnv.AUTOINTEL_PATH || '';
