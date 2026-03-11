@@ -6,7 +6,7 @@ adds:
   - src/channels/email.ts
   - src/channels/email.test.ts
 modifies:
-  - src/channels/index.ts
+  - src/index.ts
   - src/config.ts
 structured:
   npm_dependencies:

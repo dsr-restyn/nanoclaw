@@ -6,10 +6,8 @@ import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 
 import { EMAIL_POLL_INTERVAL, EMAIL_INBOX_ADDRESS, GROUPS_DIR } from '../config.js';
-import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
-import { registerChannel, ChannelOpts } from './registry.js';
-import { Channel } from '../types.js';
+import { Channel, OnInboundMessage, OnChatMetadata } from '../types.js';
 
 interface ThreadState {
   threadId: string;
@@ -23,8 +21,8 @@ interface RouteEntry {
 }
 
 export interface EmailChannelOpts {
-  onMessage: ChannelOpts['onMessage'];
-  onChatMetadata: ChannelOpts['onChatMetadata'];
+  onMessage: OnInboundMessage;
+  onChatMetadata: OnChatMetadata;
 }
 
 export class EmailChannel implements Channel {
@@ -383,16 +381,3 @@ export class EmailChannel implements Channel {
   }
 }
 
-registerChannel('email', (opts: ChannelOpts) => {
-  const env = readEnvFile(['EMAIL_ENABLED', 'EMAIL_INBOX_ADDRESS']);
-  const enabled = (process.env.EMAIL_ENABLED || env.EMAIL_ENABLED) === 'true';
-  if (!enabled) return null;
-
-  const credPath = path.join(os.homedir(), '.gmail-mcp', 'credentials.json');
-  if (!fs.existsSync(credPath)) {
-    logger.warn('Email: Gmail credentials not found at ~/.gmail-mcp/');
-    return null;
-  }
-
-  return new EmailChannel(opts);
-});
