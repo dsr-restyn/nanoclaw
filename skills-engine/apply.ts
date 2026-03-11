@@ -371,18 +371,12 @@ export async function applySkill(skillDir: string): Promise<ApplyResult> {
       }
     }
 
-    // --- Update base snapshots ---
-    // After successful application, update the base to match the current state
-    // so that subsequent skills merge against the post-application state.
-    for (const relPath of manifest.modifies) {
-      const resolvedPath = resolvePathRemap(relPath, pathRemap);
-      const currentPath = path.join(projectRoot, resolvedPath);
-      const basePath = path.join(projectRoot, NANOCLAW_DIR, 'base', resolvedPath);
-      if (fs.existsSync(currentPath)) {
-        fs.mkdirSync(path.dirname(basePath), { recursive: true });
-        fs.copyFileSync(currentPath, basePath);
-      }
-    }
+    // Base snapshots are NOT updated after skill application.
+    // The base must remain the original from --init so that multiple
+    // independent skills composing changes to the same file merge correctly:
+    //   base=original, current=original+skillA, theirs=original+skillB
+    //   → three-way merge unions both sets of changes.
+    // Updating the base would cause: current==base → merge=theirs → skillA lost.
 
     // --- Cleanup ---
     clearBackup();
