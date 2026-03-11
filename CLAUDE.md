@@ -55,6 +55,16 @@ systemctl --user stop nanoclaw
 systemctl --user restart nanoclaw
 ```
 
+## Skill Development Rules
+
+When creating or modifying skill packages (`.claude/skills/<name>/`):
+
+1. **Build modify/ files from `git show HEAD:<path>`**, not the working tree. The working tree has other skills applied; modify/ files must represent `clean HEAD + only this skill's changes`.
+2. **Validate add/ imports against HEAD.** If an add/ file imports a module, verify it exists at HEAD or is in your skill's add/ list. Never import from another skill's added files unless you declare a dependency.
+3. **Always include intent files** (`<path>.intent.md`) for each modify/ file that removes or changes existing lines. Document what changed and invariants that must hold.
+4. **Run validation before committing:** `npx tsx scripts/validate-skill.ts .claude/skills/<name>`
+5. **Never commit src/ changes directly.** Integrations exist as skills that agents apply at runtime, not as committed source. Only `.claude/skills/` files are committed.
+
 ## Container Build Cache
 
 The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.
