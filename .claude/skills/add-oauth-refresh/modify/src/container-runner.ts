@@ -8,6 +8,7 @@ import os from 'os';
 import path from 'path';
 
 import {
+  AUTOINTEL_PATH,
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
@@ -324,6 +325,15 @@ function buildVolumeMounts(
       isMain,
     );
     mounts.push(...validatedMounts);
+  }
+
+  // Mount autoIntel context repo (shared, read-only) when configured
+  if (AUTOINTEL_PATH && fs.existsSync(AUTOINTEL_PATH)) {
+    mounts.push({
+      hostPath: AUTOINTEL_PATH,
+      containerPath: '/workspace/group/autoIntel',
+      readonly: true,
+    });
   }
 
   return mounts;

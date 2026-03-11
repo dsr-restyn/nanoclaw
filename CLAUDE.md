@@ -59,11 +59,12 @@ systemctl --user restart nanoclaw
 
 When creating or modifying skill packages (`.claude/skills/<name>/`):
 
-1. **Build modify/ files from `git show HEAD:<path>`**, not the working tree. The working tree has other skills applied; modify/ files must represent `clean HEAD + only this skill's changes`.
-2. **Validate add/ imports against HEAD.** If an add/ file imports a module, verify it exists at HEAD or is in your skill's add/ list. Never import from another skill's added files unless you declare a dependency.
-3. **Always include intent files** (`<path>.intent.md`) for each modify/ file that removes or changes existing lines. Document what changed and invariants that must hold.
-4. **Run validation before committing:** `npx tsx scripts/validate-skill.ts .claude/skills/<name>`
-5. **Never commit src/ changes directly.** Integrations exist as skills that agents apply at runtime, not as committed source. Only `.claude/skills/` files are committed.
+1. **Skills are applied in a fixed order.** Each skill's modify/ files must be a complete snapshot of the file after that skill AND all prior skills are applied — but never include changes from later skills. Application order: email-channel → autointel → oauth-refresh.
+2. **Build modify/ files incrementally**, not from the working tree. Start from `git show HEAD:<path>`, apply prior skills' changes, then add yours. The working tree has ALL skills applied and will contaminate modify/ files.
+3. **Validate add/ imports against HEAD.** If an add/ file imports a module, verify it exists at HEAD or is in your skill's add/ list. Never import from another skill's added files unless you declare a dependency.
+4. **Always include intent files** (`<path>.intent.md`) for each modify/ file. Document what changed, invariants, and which prior skills are included.
+5. **Run validation before committing:** `npx tsx scripts/validate-skill.ts .claude/skills/<name>`
+6. **Never commit src/ changes directly.** Integrations exist as skills that agents apply at runtime, not as committed source. Only `.claude/skills/` files are committed.
 
 ## Container Build Cache
 

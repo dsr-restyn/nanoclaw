@@ -39,8 +39,11 @@ Replaced stdin-based secret passing with credential proxy + OAuth token auto-ref
 - Removed: `input.secrets = readSecrets()` and `delete input.secrets`
 - Input is written directly to stdin without secrets
 
+## Prior skills included
+- autointel: `AUTOINTEL_PATH` import from config.js, autoIntel mount block in buildVolumeMounts()
+
 ## Invariants
-- All existing mount logic unchanged
+- All existing mount logic unchanged (including autointel mount)
 - Falls back gracefully: fresh token → stale token → .env value
 - Atomic credential writes (temp + rename) prevent corruption
 - Credentials file is never mounted into containers
