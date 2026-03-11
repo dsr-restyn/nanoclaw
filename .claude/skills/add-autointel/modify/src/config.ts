@@ -68,18 +68,6 @@ export const TRIGGER_PATTERN = new RegExp(
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-// Email channel configuration
-const emailEnv = readEnvFile(['EMAIL_ENABLED', 'EMAIL_POLL_INTERVAL', 'EMAIL_INBOX_ADDRESS']);
-
-export const EMAIL_ENABLED =
-  (process.env.EMAIL_ENABLED || emailEnv.EMAIL_ENABLED) === 'true';
-export const EMAIL_POLL_INTERVAL = parseInt(
-  process.env.EMAIL_POLL_INTERVAL || emailEnv.EMAIL_POLL_INTERVAL || '60',
-  10,
-) * 1000; // Convert to ms
-export const EMAIL_INBOX_ADDRESS =
-  process.env.EMAIL_INBOX_ADDRESS || emailEnv.EMAIL_INBOX_ADDRESS || '';
-
 // autoIntel context repo path (mounted read-only into agent containers)
 const autoIntelEnv = readEnvFile(['AUTOINTEL_PATH']);
 export const AUTOINTEL_PATH =
