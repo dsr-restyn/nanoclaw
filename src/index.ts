@@ -3,13 +3,10 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
-  HTTP_CHANNEL_ENABLED,
-  HTTP_PORT,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
   TRIGGER_PATTERN,
-  WHATSAPP_ENABLED,
 } from './config.js';
 import {
   ContainerOutput,
@@ -188,14 +185,6 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let outputSentToUser = false;
 
   const output = await runAgent(group, prompt, chatJid, async (result) => {
-    // Tool use event — relay to channel for progress tracking
-    if (result.eventType === 'tool' && result.tool) {
-      logger.info({ group: group.name, tool: result.tool }, 'Agent tool use');
-      await channel.sendProgress?.(chatJid, result.tool, result.toolSummary || '');
-      resetIdleTimer();
-      return;
-    }
-
     // Streaming output callback — called for each agent result
     if (result.result) {
       const raw = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
@@ -203,11 +192,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        if (result.eventType === 'result') {
-          await channel.sendResult?.(chatJid, text);
-        } else {
-          await channel.sendMessage(chatJid, text);
-        }
+        await channel.sendMessage(chatJid, text);
         outputSentToUser = true;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -481,32 +466,10 @@ async function main(): Promise<void> {
   };
 
   // Create and connect channels
-  if (WHATSAPP_ENABLED) {
-    const { WhatsAppChannel } = await import('./channels/whatsapp.js');
-    const whatsapp = new WhatsAppChannel(channelOpts);
-    channels.push(whatsapp);
-    await whatsapp.connect();
-  } else {
-    logger.info('WhatsApp channel disabled');
-  }
-
-  // HTTP/SSE channel (optional — enabled via HTTP_CHANNEL_ENABLED)
-  if (HTTP_CHANNEL_ENABLED) {
-    const { HttpChannel } = await import('./channels/http.js');
-    const httpChannel = new HttpChannel({
-      port: HTTP_PORT,
-      ...channelOpts,
-      enqueueCheck: (jid: string) => queue.enqueueMessageCheck(jid),
-      registerGroup,
-    });
-    channels.push(httpChannel);
-    await httpChannel.connect();
-  }
-
-  if (channels.length === 0) {
-    logger.fatal('No channels enabled. Set WHATSAPP_ENABLED=true or HTTP_CHANNEL_ENABLED=true');
-    process.exit(1);
-  }
+  const { WhatsAppChannel } = await import('./channels/whatsapp.js');
+  const whatsapp = new WhatsAppChannel(channelOpts);
+  channels.push(whatsapp);
+  await whatsapp.connect();
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({
